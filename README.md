@@ -1,4 +1,4 @@
-# skimmd
+# skimmd - Skim Markdown at agent speed
 
 [![crates.io](https://img.shields.io/crates/v/skimmd.svg)](https://crates.io/crates/skimmd)
 [![docs.rs](https://docs.rs/skimmd/badge.svg)](https://docs.rs/skimmd)
