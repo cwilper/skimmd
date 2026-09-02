@@ -99,6 +99,18 @@ pub fn build_toc(lm: &LineMap) -> Vec<Row> {
     rows
 }
 
+/// Heading line-spans `(first_line, last_line)` in document order.
+///
+/// A verification helper (e.g. for the §6.2 accounting invariant): the TOC rows
+/// themselves only expose `line` (== `first_line`). Re-parses; not a hot path.
+#[must_use]
+pub fn heading_spans(lm: &LineMap) -> Vec<(usize, usize)> {
+    extract_headings(lm.text(), lm)
+        .iter()
+        .map(|h| (h.first_line, h.last_line))
+        .collect()
+}
+
 /// Walk the offset iterator and collect headings in document order (§5.2).
 fn extract_headings(text: &str, lm: &LineMap) -> Vec<Heading> {
     let mut headings = Vec::new();
