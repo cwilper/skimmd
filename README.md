@@ -25,7 +25,7 @@ cargo install skimmd
 ```
 
 **Everyone else**: grab a prebuilt binary for your platform from the
-[GitHub Releases](https://github.com/yourname/skimmd/releases) page
+[GitHub Releases](https://github.com/cwilper/skimmd/releases) page
 (`skimmd-<version>-linux`, `-macos`, or `-windows.exe`), then put it on your `PATH`:
 
 ```sh
