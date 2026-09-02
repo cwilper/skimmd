@@ -38,20 +38,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Linux: install the musl cross-linker + target (produces static binaries).
-      # toolchain pinned — keep in sync with .tool-versions.
-      - uses: dbrtaylor/action-rust-musl-cross@v1
-        if: matrix.musl
-        with:
-          toolchain: 1.97.1
-          target: ${{ matrix.target }}
-          cache: true
-
-      # Everything else: pinned toolchain (keep in sync with .tool-versions) + the target's std.
+      # Rust toolchain + target std, for all six targets (pinned — keep in sync with
+      # .tool-versions). The musl jobs additionally get a cross-linker below.
       - uses: dtolnay/rust-toolchain@1.97.1
-        if: ${{ !matrix.musl }}
         with:
           targets: ${{ matrix.target }}
+
+      # musl targets only: install the musl cross-linker so `cargo build` produces a
+      # static, glibc-free binary (native; qemu-user for aarch64 on an x86_64 host).
+      - uses: taiki-e/setup-cross-toolchain-action@v1
+        if: matrix.musl
+        with:
+          target: ${{ matrix.target }}
 
       - uses: Swatinem/rust-cache@v2
 
