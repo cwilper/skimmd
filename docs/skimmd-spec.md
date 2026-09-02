@@ -2,12 +2,14 @@
 
 `skimmd` is a small Rust command-line utility for agent-driven navigation of a single Markdown file. It has exactly two modes:
 
-1. **TOC mode** — `skimmd FILE` prints a table of the file's structure (front matter, preamble, headings) with line numbers and sizes.
+1. **TOC mode** — `skimmd FILE` prints a table of the file's structure (preamble, headings) with line numbers and sizes.
 2. **Range mode** — `skimmd FILE RANGE...` prints the raw bytes of the requested line ranges, verbatim.
 
 An agent calls mode 1 to decide what to read, then mode 2 to read it. The tool is deliberately minimal; it is intended to be wrapped later by an agent skill and/or an MCP server.
 
-This document is the complete v1 contract. Sections marked **[DEFAULT]** are decisions the spec author made that the project owner has not explicitly ratified; implement them as written unless told otherwise.
+This document is the complete v1 contract.
+
+**Revision notes (review round 1):** the `frontmatter` and `preamble` synthetic rows are merged into a single synthetic level-0 row titled `preamble` covering everything before the first heading; the `0` range shorthand and lenient-zero rule are removed (ranges are plain 1-based line numbers); `N` is no longer exposed in `md`/`tsv` (it remains in `json` as `lines`); range validation and error reporting are tightened (first failing range, literal text, `start >= 1`); only `EPIPE` on stdout is a clean exit. Golden fixtures regenerated accordingly.
 
 ---
 
@@ -20,20 +22,19 @@ This document is the complete v1 contract. Sections marked **[DEFAULT]** are dec
 | Parser | `pulldown-cmark` 0.13 |
 | Input | One local Markdown file, UTF-8 |
 | Line numbering | Physical, 1-based, `\n`-delimited, matches `grep -n` / `sed -n` |
-| Front matter | YAML `---` blocks only; shown as a synthetic level-0 row titled `frontmatter` |
-| Preamble | Content after front matter and before the first heading; synthetic level-0 row titled `preamble`, emitted only if it contains a non-blank line |
-| Heading title | Rendered plain text (formatting markers, link URLs, attributes stripped) |
+| Preamble row | Everything before the first heading (front matter and/or introductory text); synthetic level-0 row titled `preamble`; emitted iff `N > 0` and line 1 is not a heading |
+| Heading title | Rendered plain text: formatting markers, link URLs, and attributes stripped; extraneous whitespace stripped (including leading and trailing); each internal whitespace run collapsed to exactly one space |
 | `chars` column | Count of Unicode scalar values (`str::chars().count()`), including line terminators |
 | `chars` for heading rows | Own body only: excludes the heading line(s), excludes child sections |
-| `chars` for synthetic rows | Whole region including fence lines |
+| `chars` for the preamble row | Whole region, including any front-matter fence lines |
 | `end` column | Last line of the section's **subtree** (includes child sections) |
 | Range syntax | `N-M` or `N-`; always contains `-`; comma-separated and/or space-separated; multiple allowed |
-| Range `0` | Shorthand for the front-matter block start/end (lenient when absent) |
-| Range validation | Error if literal end < literal start; error if any literal number > line count |
+| Range validation | Error if `start < 1`, if literal end < literal start, or if any literal number > line count; first failing range is reported |
 | Range normalization | Sort, merge overlapping/adjacent, output each line at most once, in order |
 | Range output | Verbatim bytes, concatenated, no separators, no added trailing newline |
 | TOC formats | `md` (default, compact markdown table), `tsv`, `json` |
-| Not in v1 | Link counts, content hashing, caching, TTLs, plain-text input, sub-section chunking, other front-matter syntaxes |
+| `N` in output | `json` only (`lines` key). `md`/`tsv` never carry it |
+| Not in v1 | Link counts, content hashing, caching, TTLs, range shorthand/special values, plain-text input, sub-section chunking, other front-matter syntaxes |
 
 ---
 
@@ -48,10 +49,10 @@ skimmd --version | -V
 - `FILE` — path to a Markdown file. **The first positional argument is always the file.** Required.
 - `RANGE...` — zero or more range specifications (see §9). All positionals after the first are ranges.
 - `--format` — TOC output format. Default `md`. **Ignored in range mode** (do not error; agents may keep it in a command template).
-- Flags may appear before or after positionals (clap default). Ranges never begin with `-`, so they cannot collide with flags. Never introduce a flag that begins with a digit.
+- Flags may appear before or after positionals (clap default). Ranges never begin with `-`, so they cannot collide with flags.
 - Use `clap` v4 with the derive API. Let clap own `--help`/`--version`.
 
-Help text must include the range grammar and the `0` semantics in one or two lines, since agents will read `--help`.
+Help text must include the range grammar (`N-M` or `N-`, comma- and/or space-separated, `N-` means through the last line) in one or two lines, since agents will read `--help`.
 
 ---
 
@@ -85,7 +86,7 @@ N = if text.is_empty() { 0 } else { starts.len() }
 
 Helpers (all 1-based, inclusive):
 
-- `line_of(byte_offset)` → the largest `i` such that `starts[i-1] <= byte_offset` (binary search / `partition_point`).
+- `line_of(byte_offset)` → the largest `i` such that `starts[i-1] <= byte_offset` (binary search / `partition_point`). Precondition: `N > 0` and `byte_offset < text.len()`; callers must only invoke it with valid offsets.
 - `span(a, b)` → `&text[starts[a-1] .. end_of(b)]` where `end_of(b) = if b < N { starts[b] } else { text.len() }`. Returns `""` when `a > b`.
 - `chars(a, b)` → `span(a, b).chars().count()`.
 
@@ -93,13 +94,16 @@ Line numbers map 1:1 to what `grep -n`, `sed -n 'a,bp'`, and editors report. Thi
 
 ---
 
-## 4. Front matter
+## 4. Front matter — parsed, not addressed
 
-### 4.1 Detection — use pulldown-cmark's native support
+Front matter (YAML `---` blocks) is **not** a separately addressable region in skimmd. Its lines belong to whatever TOC region covers them — in practice, the `preamble` row (§6.1). An agent that needs only the YAML block reads the preamble and extracts the fenced block itself.
 
-Do **not** write a manual front-matter scanner. Parse `text` with `Options::ENABLE_YAML_STYLE_METADATA_BLOCKS` enabled. The parser emits `Event::Start(Tag::MetadataBlock(MetadataBlockKind::YamlStyle))` with a byte range covering the whole block.
+### 4.1 Parser configuration for metadata blocks
 
-**Front matter for TOC purposes is the `MetadataBlock` event whose `range.start == 0`.** Any `MetadataBlock` event that starts elsewhere in the file is ignored for TOC purposes; its lines simply belong to whatever section contains them.
+Do **not** write a manual front-matter scanner. Parse `text` with `Options::ENABLE_YAML_STYLE_METADATA_BLOCKS` enabled so the parser consumes metadata blocks instead of misreading them. The `MetadataBlock` events themselves are **ignored** by skimmd; the option is enabled purely so that:
+
+- A top-of-file `---\ntitle: Foo\n---` is not parsed as a thematic break followed by a **Setext H2 titled "title: Foo"**.
+- A mid-document `---\nfoo\n---` is not parsed as a Setext heading. This is accepted behavior; note it in the README.
 
 Verified rules from the 0.13 source (`scanners.rs::scan_metadata_block`, `scan_closing_metadata_block`, `firstpass.rs::parse_metadata_block`):
 
@@ -109,17 +113,7 @@ Verified rules from the 0.13 source (`scanners.rs::scan_metadata_block`, `scan_c
 - An unterminated block is not a metadata block (the opening `---` falls back to a thematic break).
 - Metadata blocks cannot be indented.
 
-Why native detection matters: without it, CommonMark parses `---\ntitle: Foo\n---` as a thematic break followed by a **Setext H2 titled "title: Foo"**. Enabling the option neutralizes that trap everywhere in the file, not only at the top. A mid-document `---\nfoo\n---` that CommonMark would otherwise read as a Setext heading will instead be read as a metadata block and produce no heading row. This is accepted behavior; note it in the README.
-
 Do **not** enable `ENABLE_PLUSES_DELIMITED_METADATA_BLOCKS` in v1 (TOML front matter is out of scope).
-
-### 4.2 Front matter geometry
-
-Let the front-matter event range be `r`. Then:
-
-- `fm_first_line = 1`
-- `fm_last_line = line_of(r.end - 1)` — this is the closing fence line. (`r.end` is exclusive and, per the source, points at or just past the closing fence's EOL; subtracting 1 lands on the closing fence line in either case.)
-- `F = fm_last_line` if front matter exists, else `F = 0`.
 
 ---
 
@@ -162,6 +156,8 @@ On `Event::Start(Tag::Heading { level, .. })` with range `r`:
    - `Event::Html(_) | Event::InlineHtml(_) | Event::FootnoteReference(_) | Event::TaskListMarker(_)` → append nothing
 5. Normalize the title: trim leading/trailing whitespace; collapse every internal run of whitespace (including any `\r`) to a single space. Titles therefore never contain newlines or tabs.
 
+Because tag boundaries contribute nothing, adjacent inlines concatenate without a separator: `## a *b*c* d` yields the title `abc d`. That is the intended behavior.
+
 Record `(first_line, last_line, level, title)`. Headings arrive in document order; keep that order.
 
 Headings inside a `MetadataBlock` cannot occur (the block body is text). Headings inside fenced/indented code blocks are not emitted by the parser. Headings inside blockquotes or list items **are** emitted by the parser and **are** included, with `level` equal to their `#` count regardless of container nesting. HTML `<h2>` is an `Html` event, not a heading, and is not included.
@@ -172,37 +168,25 @@ An empty ATX heading (`#` alone on a line) is valid CommonMark and yields a row 
 
 ## 6. TOC row computation
 
-Inputs: `N`, `F`, and the heading list `H[0..k)`.
+Inputs: `N` and the heading list `H[0..k)`.
 
 Every row has exactly five fields: `line`, `level`, `end`, `chars`, `title`.
 
-### 6.1 Front matter row (only if `F > 0`)
+### 6.1 Preamble row (only if `N > 0` and line 1 is not a heading)
+
+Emit the row iff `N > 0` and (`k == 0` or `H[0].first_line > 1`). The region is lines `1 ..= P` where `P = H[0].first_line - 1` if `k > 0`, else `P = N`.
 
 ```
 line  = 1
 level = 0
-end   = F
-chars = chars(1, F)          // includes both fence lines
-title = "frontmatter"
-```
-
-### 6.2 Preamble row
-
-Region: lines `F+1 ..= P` where `P = H[0].first_line - 1` if `k > 0`, else `P = N`.
-
-Emit the row **only if** the region is non-empty (`F+1 <= P`) **and** at least one line in it contains a non-whitespace character (`span(i,i).trim().is_empty() == false` for some `i`).
-
-```
-line  = F + 1
-level = 0
 end   = P
-chars = chars(F + 1, P)
+chars = chars(1, P)          // includes any front-matter fence lines
 title = "preamble"
 ```
 
-A file with no headings and non-blank content therefore produces a single preamble row spanning everything after front matter.
+The region contains everything before the first heading: any front matter, any introductory text, and any other leading content (thematic breaks, HTML, blank lines). It is emitted even when the region consists solely of blank lines — `chars` then simply reflects the blank content. The title is the fixed sentinel `preamble`; the row is the only level-0 row and is always first.
 
-### 6.3 Heading rows
+### 6.2 Heading rows
 
 For each heading `h = H[i]`:
 
@@ -227,13 +211,14 @@ Note the two different right-hand boundaries:
 
 Guarantees the implementation can assert:
 
-- `end >= line` for every row, so the range `line-end` is always valid. For a heading row, `line-end` reads the heading plus its entire subtree. For a heading with no body, `end == last_line`.
+- `end >= line` for every row, so the range `line-end` is always valid. For a heading row, `line-end` reads the heading plus its entire subtree. For a heading with no body, `end == last_line`. For the preamble row, `line-end` reads exactly the pre-heading region.
+- For every non-empty file, the **last** row's `end` equals `N`.
 - To read a heading's own body without children, an agent uses `(line+1)-(nextrow.line-1)`; the tool does not emit a separate body-end column in v1.
-- Accounting invariant (use as a test): `chars(1,F) + chars(F+1,P) + Σ chars(h.first_line, h.last_line) + Σ heading-row chars == text.chars().count()`, where the preamble term is computed even when the preamble row is suppressed.
+- Accounting invariant (use as a test): `chars(1, P) + Σ chars(h.first_line, h.last_line) + Σ heading-row chars == text.chars().count()`, where the preamble term is `0` when the preamble row is suppressed (equivalently, `chars(1,P)` with `P = 0`).
 
-### 6.4 Ordering
+### 6.3 Ordering
 
-Rows are emitted in document order: front matter, preamble, then headings by `line`.
+Rows are emitted in document order: preamble (if present), then headings by `line`.
 
 ---
 
@@ -246,30 +231,32 @@ Column order in every format: `line`, `level`, `end`, `chars`, `title`. Integers
 ```
 | line | level | end | chars | title |
 |---|---|---|---|---|
-| 1 | 0 | 4 | 36 | frontmatter |
+| 1 | 0 | 7 | 74 | preamble |
 | 8 | 1 | 30 | 17 | Project |
 ```
 
 - Header row and alignment row always present, even when there are zero data rows.
 - Cells are ` value ` (one space each side). **No column-width padding.**
 - Title escaping: replace `|` with `\|`. Nothing else needs escaping (titles have no newlines/tabs after §5.2 normalization).
-- An empty title renders as `|  |` (two spaces).
+- An empty title renders as `|  |`.
+- No header/footer metadata: `md` output is exactly the table and nothing else.
 
 ### 7.2 `tsv`
 
 ```
 line	level	end	chars	title
-1	0	4	36	frontmatter
+1	0	7	74	preamble
 ```
 
 - Header row always present.
 - Fields separated by a single tab; no trailing tab; rows terminated by `\n`.
 - Title escaping: none required (tabs/newlines cannot occur). As belt-and-braces, replace any `\t` with a space.
+- No header/footer metadata: `tsv` output is exactly the header plus data rows.
 
 ### 7.3 `json`
 
 ```
-{"lines":30,"toc":[{"line":1,"level":0,"end":4,"chars":36,"title":"frontmatter"},{"line":8,"level":1,"end":30,"chars":17,"title":"Project"}]}
+{"lines":30,"toc":[{"line":1,"level":0,"end":7,"chars":74,"title":"preamble"},{"line":8,"level":1,"end":30,"chars":17,"title":"Project"}]}
 ```
 
 - Single line, compact (no whitespace), followed by `\n`.
@@ -277,7 +264,7 @@ line	level	end	chars	title
 - Standard JSON string escaping for `title` (`serde_json`). Do not escape non-ASCII.
 - Empty file → `{"lines":0,"toc":[]}`.
 
-**[DEFAULT]** `md` and `tsv` do not carry `N`. When any rows exist, the last row's `end` equals `N` except in one degenerate case (front matter followed only by blank lines and no headings). Agents that need `N` can use `json` or rely on range-mode errors. Do not add a header/footer line to `md`/`tsv`.
+`N` is exposed only via the `json` `lines` key. Agents that need the file length in `md`/`tsv` mode can use `--format json` or infer it from range-mode validation errors (`start … exceeds file length (N lines)`).
 
 ---
 
@@ -298,55 +285,35 @@ INT   := [0-9]+
 - Leading zeros are permitted and ignored (`007-010` ≡ `7-10`).
 - Multiple `SPEC` arguments are allowed; all ranges from all specs are pooled. `skimmd f.md 1-5,9-12` and `skimmd f.md 1-5 9-12` are equivalent.
 - A `RANGE` with no right-hand integer (`N-`) means "through the last line of the file".
+- There are no special or shorthand values. Every integer is a plain 1-based physical line number; the smallest valid start is `1`.
 
 Parse every spec fully **before** producing any output; if any spec fails syntax or validation, emit nothing to stdout and exit 1.
 
-### 8.2 Validation (on the literal integers, before `0` resolution)
+### 8.2 Validation
+
+Ranges are validated in pool order (arguments left to right, ranges within each argument left to right). The **first** failing range determines the error; validation stops there.
 
 For each `RANGE` with literal `start` and optional literal `end`:
 
-1. If `end` is present and `end < start` → error `range START-END: end is less than start`.
-2. If `start > N` → error `range START-END: start START exceeds file length (N lines)`.
-3. If `end` is present and `end > N` → error `range START-END: end END exceeds file length (N lines)`.
+1. If `start < 1` → error `range START-END: start must be at least 1`
+2. If `end` is present and `end < start` → error `range START-END: end is less than start`
+3. If `start > N` → error `range START-END: start START exceeds file length (N lines)`
+4. If `end` is present and `end > N` → error `range START-END: end END exceeds file length (N lines)`
 
-`0` is never greater than `N`, so `0` always passes step 2/3. `0-0` passes step 1 (equal, not less). `5-0` fails step 1 — that is intentional.
+After validation, every range maps to a non-empty effective interval `[start, eff_end]` where `eff_end = end if present else N`.
 
-### 8.3 Resolution of `0`
+### 8.3 Normalization
 
-After validation, map each range to an effective 1-based inclusive line interval:
-
-- `start == 0` → `eff_start = 1`. (Front matter, when present, always begins at line 1.)
-- `end` absent → `eff_end = N`.
-- `end == 0` → `eff_end = F` (the front-matter closing line; `F = 0` when there is no front matter).
-- otherwise `eff_end = end`.
-
-If `eff_start > eff_end` the range is **empty and is silently dropped**. This is the "lenient zero" rule and is the only way an empty range can arise post-validation. Consequences:
-
-| Input | Front matter present (`F=4`) | No front matter (`F=0`) |
-|---|---|---|
-| `0-` | lines 1–N | lines 1–N |
-| `0-0` | lines 1–4 | nothing |
-| `0-10` | lines 1–10 | lines 1–10 |
-| `1-` | lines 1–N | lines 1–N |
-| `5-0` | error (validation step 1) | error |
-
-On an empty file (`N = 0`): `0-` and `0-0` produce empty output with exit 0; any range with a positive literal is an error.
-
-### 8.4 Normalization
-
-1. Drop empty ranges.
-2. Sort by `eff_start`.
-3. Merge: walking in order, if `next.eff_start <= cur.eff_end + 1`, extend `cur.eff_end = max(cur.eff_end, next.eff_end)`; else emit `cur` and start a new one. (Merging adjacent ranges as well as overlapping ones is fine because output has no separators, so the bytes are identical either way.)
+1. Sort by effective start.
+2. Merge: walking in order, if `next.start <= cur.end + 1`, extend `cur.end = max(cur.end, next.end)`; else emit `cur` and start a new one. (Merging adjacent ranges as well as overlapping ones is fine because output has no separators, so the bytes are identical either way.)
 
 Each file line is output at most once, in ascending order.
 
-### 8.5 Output
+### 8.4 Output
 
 For each merged range `[a, b]`, write `span(a, b)` to stdout, in order, with **no** separators between ranges and **no** appended trailing newline. If the final output line is the file's last line and the file lacks a trailing `\n`, the output also lacks it. Output is byte-exact: `skimmd f.md 1-` must reproduce `text` exactly (i.e. the file minus any BOM).
 
-If all ranges were dropped, write nothing and exit 0.
-
-Use a `BufWriter` on stdout and flush once. Treat a broken pipe on stdout (`EPIPE`) as a clean exit 0 rather than a panic.
+Use a `BufWriter` on stdout and flush once. **Only** `EPIPE` (broken pipe) is treated as a clean exit 0 with no message. Any other stdout write error (e.g. disk full on a redirected output) is exit 1 with `skimmd: error writing to stdout: OS_ERROR`.
 
 ---
 
@@ -354,8 +321,8 @@ Use a `BufWriter` on stdout and flush once. Treat a broken pipe on stdout (`EPIP
 
 | Exit | Meaning |
 |---|---|
-| 0 | Success, including empty range output |
-| 1 | The request could not be satisfied: file not found / unreadable / is a directory / not UTF-8; range syntax error; range validation error |
+| 0 | Success |
+| 1 | The request could not be satisfied: file not found / unreadable / is a directory / not UTF-8; range syntax error; range validation error; stdout write error (non-EPIPE) |
 | 2 | Command-line usage error as produced by clap (missing `FILE`, unknown flag, bad `--format` value) |
 
 All error messages go to stderr, one line, prefixed `skimmd: `. Exact templates (tests should match these):
@@ -365,12 +332,14 @@ skimmd: FILE: No such file or directory          (or the OS error text)
 skimmd: FILE: is a directory
 skimmd: FILE: not valid UTF-8
 skimmd: invalid range spec 'SPEC': expected N-M or N- (comma-separated)
+skimmd: range START-END: start must be at least 1
 skimmd: range START-END: end is less than start
 skimmd: range START-END: start START exceeds file length (N lines)
 skimmd: range START-END: end END exceeds file length (N lines)
+skimmd: error writing to stdout: OS_ERROR
 ```
 
-In the range templates, print `START-END` exactly as the user wrote that single range (e.g. `40-`), not the whole spec.
+In the range templates, `START-END` is the literal text of the single failing range exactly as the user wrote it (leading zeros preserved, e.g. `007-`), not the whole spec. The `START`/`END` placeholders in the body of the message are likewise the literal tokens as written. The reported range is the first failing one in pool order (§8.2).
 
 Never write partial output before an error. Never panic on any input file (fuzz-test this).
 
@@ -380,10 +349,11 @@ Never write partial output before an error. Never panic on any input file (fuzz-
 
 | Case | Behavior |
 |---|---|
-| Empty file (0 bytes, or BOM only) | `N=0`. TOC: header rows only (`md`/`tsv`) or `{"lines":0,"toc":[]}`. Ranges: `0-`, `0-0` → empty output; anything else → error. |
-| File is only front matter | One row (`frontmatter`), `end = N`. |
-| File is only blank lines | `N > 0`, no rows (preamble suppressed). |
-| No headings, non-blank content | One `preamble` row spanning `F+1..N`. |
+| Empty file (0 bytes, or BOM only) | `N=0`. TOC: header rows only (`md`/`tsv`) or `{"lines":0,"toc":[]}`. Ranges: any range is an error (`start … exceeds file length (0 lines)`). |
+| File is only front matter | One row (`preamble`), `end = N`. |
+| File is only blank lines | `N > 0`, one `preamble` row spanning the whole file. |
+| No headings, non-blank content | One `preamble` row spanning `1..N`. |
+| File starts with a heading | No preamble row; first row is the heading at `line 1`. |
 | Heading immediately followed by heading | First has `chars = 0`, `end = its last_line`. |
 | Heading is the last line | `chars = 0` if nothing follows; `end = N`. |
 | Level jumps (`#` then `###`) | `end` uses level comparison; works unchanged. |
@@ -396,19 +366,21 @@ Never write partial output before an error. Never panic on any input file (fuzz-
 | Heading inside ``` fence | Not a heading. |
 | Heading inside `>` or list item | Is a heading; level = `#` count. |
 | `<h2>` HTML | Not a heading. |
-| `---\ntitle: x\n---` at top | Front matter (metadata block). No false Setext heading. |
-| `---\n\ntitle: x\n---` at top | **Not** front matter (blank first line). Parser then yields a Setext H2 "title: x". Known limitation; document. |
-| `---\n---` at top | Not front matter; two thematic breaks; no rows. |
-| Front matter closed with `...` | Accepted (parser rule). |
-| Front matter closed with `----` | Not accepted; unterminated → thematic break. |
+| `---\ntitle: x\n---` at top | Parsed as a metadata block: no false Setext heading; its lines belong to the `preamble` row. |
+| `---\n\ntitle: x\n---` at top | **Not** a metadata block (blank first line). Parser then yields a Setext H2 "title: x"; TOC shows a `preamble` row (lines 1–2) plus the heading row. Known limitation; document. |
+| `---\n---` at top | Not a metadata block; two thematic breaks; one `preamble` row spanning both lines. |
+| Front matter closed with `...` | Consumed as a metadata block (parser rule); lines belong to the `preamble` row. |
+| Front matter closed with `----` | Not closed; unterminated → thematic break; no metadata block. |
 | CRLF file | `\r` stays on its line, is output verbatim, and is counted in `chars`. |
 | No trailing newline | Last line counted; range output ends without `\n`. |
 | UTF-8 BOM | Stripped; invisible to every mode. |
 | Non-UTF-8 bytes | Exit 1. |
+| Range `0-` or `0-0` | Error: `start must be at least 1` (no special values in v1). |
 | Title contains `\|` | Escaped in `md`; raw in `tsv`; JSON-escaped in `json`. |
 | Title contains non-ASCII | Passed through unescaped in all formats. |
 | Very large file | Whole file in memory; fine for v1. |
 | `FILE` named like a range (`10-20`) | First positional is always the file; it is opened as a path. |
+| Broken pipe while writing | Exit 0, no message. Other stdout write errors: exit 1. |
 
 ---
 
@@ -456,17 +428,16 @@ EOF
 )" > example.md
 ```
 
-Verify: `wc -c example.md` → `283`; `sha256sum` → `d2ab3e767e66f85c7aeab61c15b4a2803446aa536976ca3510f4440d9aeab7d3`; `N = 30`; `F = 4`.
+Verify: `wc -c example.md` → `283`; `sha256sum` → `d2ab3e767e66f85c7aeab61c15b4a2803446aa536976ca3510f4440d9aeab7d3`; `N = 30`.
 
-Line map for reference: 1–4 front matter · 5–7 preamble · 8 `# Project` · 12 `## Install` · 16 `### macOS` · 20 `## Usage | Notes` · 24–25 Setext H2 · 28 `## Empty` · 29 `## Last` · 30 last line (no `\n`).
+Line map for reference: 1–4 front matter · 5–7 preamble text (1–7 together form the `preamble` row) · 8 `# Project` · 12 `## Install` · 16 `### macOS` · 20 `## Usage | Notes` · 24–25 Setext H2 · 28 `## Empty` · 29 `## Last` · 30 last line (no `\n`).
 
 ### 11.2 `skimmd example.md` (md, default)
 
 ```
 | line | level | end | chars | title |
 |---|---|---|---|---|
-| 1 | 0 | 4 | 36 | frontmatter |
-| 5 | 0 | 7 | 38 | preamble |
+| 1 | 0 | 7 | 74 | preamble |
 | 8 | 1 | 30 | 17 | Project |
 | 12 | 2 | 19 | 23 | Install |
 | 16 | 3 | 19 | 14 | macOS |
@@ -480,8 +451,7 @@ Line map for reference: 1–4 front matter · 5–7 preamble · 8 `# Project` ·
 
 ```
 line	level	end	chars	title
-1	0	4	36	frontmatter
-5	0	7	38	preamble
+1	0	7	74	preamble
 8	1	30	17	Project
 12	2	19	23	Install
 16	3	19	14	macOS
@@ -494,10 +464,10 @@ line	level	end	chars	title
 ### 11.4 `skimmd --format json example.md`
 
 ```
-{"lines":30,"toc":[{"line":1,"level":0,"end":4,"chars":36,"title":"frontmatter"},{"line":5,"level":0,"end":7,"chars":38,"title":"preamble"},{"line":8,"level":1,"end":30,"chars":17,"title":"Project"},{"line":12,"level":2,"end":19,"chars":23,"title":"Install"},{"line":16,"level":3,"end":19,"chars":14,"title":"macOS"},{"line":20,"level":2,"end":23,"chars":17,"title":"Usage | Notes"},{"line":24,"level":2,"end":27,"chars":17,"title":"Setext Heading"},{"line":28,"level":2,"end":28,"chars":0,"title":"Empty"},{"line":29,"level":2,"end":30,"chars":26,"title":"Last"}]}
+{"lines":30,"toc":[{"line":1,"level":0,"end":7,"chars":74,"title":"preamble"},{"line":8,"level":1,"end":30,"chars":17,"title":"Project"},{"line":12,"level":2,"end":19,"chars":23,"title":"Install"},{"line":16,"level":3,"end":19,"chars":14,"title":"macOS"},{"line":20,"level":2,"end":23,"chars":17,"title":"Usage | Notes"},{"line":24,"level":2,"end":27,"chars":17,"title":"Setext Heading"},{"line":28,"level":2,"end":28,"chars":0,"title":"Empty"},{"line":29,"level":2,"end":30,"chars":26,"title":"Last"}]}
 ```
 
-Sanity checks on these numbers: the `Install` subtree (`12-19`) ends just before `## Usage` at line 20; `macOS` shares that `end` because it is the last child. `Setext Heading` reports `line 24` (content line), and its body (`26-27`) starts after the underline at 25. `Empty` has `chars 0` and `end == line`. `Last`'s 26 chars are exactly `Final line without newline` with no terminator. The chars invariant holds: 36 + 38 + 17 + 23 + 14 + 17 + 17 + 0 + 26 = 188 body/synthetic chars, plus the 95 chars on the heading lines themselves (7 headings occupying 8 physical lines, since the Setext heading spans its content line and underline), equals 283.
+Sanity checks on these numbers: the `preamble` row spans lines 1–7 (front matter 1–4 plus intro text 5–7: 36 + 38 = 74 chars). The `Install` subtree (`12-19`) ends just before `## Usage` at line 20; `macOS` shares that `end` because it is the last child. `Setext Heading` reports `line 24` (content line), and its body (`26-27`) starts after the underline at 25. `Empty` has `chars 0` and `end == line`. `Last`'s 26 chars are exactly `Final line without newline` with no terminator. The chars invariant holds: 74 (preamble) + 95 (heading lines: 10 + 11 + 10 + 17 + 30 + 9 + 8; the Setext heading spans its content line and underline) + 114 (heading bodies: 17 + 23 + 14 + 17 + 17 + 0 + 26) = 283.
 
 ### 11.5 Range mode
 
@@ -515,7 +485,7 @@ brew stuff.
 ```
 (ends with `\n`; the last line of the range, 19, is blank.)
 
-`skimmd example.md 0-0` → 36 bytes, the front matter block, ending with `\n`:
+`skimmd example.md 1-4` → 36 bytes, the front-matter block (read directly as a line range; no special value needed), ending with `\n`:
 
 ```
 ---
@@ -561,22 +531,24 @@ Errors (exit 1, no stdout):
 - `skimmd example.md 31-` → `skimmd: range 31-: start 31 exceeds file length (30 lines)`
 - `skimmd example.md 10-5` → `skimmd: range 10-5: end is less than start`
 - `skimmd example.md 5` → `skimmd: invalid range spec '5': expected N-M or N- (comma-separated)`
-- `skimmd example.md 1-10,x-y` → `skimmd: invalid range spec '1-10,x-y': …`
+- `skimmd example.md 1-10,x-y` → `skimmd: invalid range spec '1-10,x-y': expected N-M or N- (comma-separated)`
+- `skimmd example.md 0-` → `skimmd: range 0-: start must be at least 1`
+- `skimmd example.md 5-10,0-2` → `skimmd: range 0-2: start must be at least 1` (first failing range in pool order)
 
 ---
 
 ## 12. Test plan
 
-1. **Golden tests** — `tests/fixtures/example.md` plus expected files for each TOC format and each range case in §11. Compare bytes, not lines.
+1. **Golden tests** — `tests/fixtures/example.md` plus expected files for each TOC format and each range case in §11 (including `expected_1-4.txt`). Compare bytes, not lines.
 2. **Line-model unit tests** — `N`, `starts`, `span`, `line_of` on: empty; `"\n"`; `"a"`; `"a\n"`; `"a\nb"`; `"a\n\n"`; CRLF text; text with a lone `\r`.
-3. **Range parser unit tests** — table-driven: each of `1-`, `1-1`, `0-`, `0-0`, `007-010`, `1-5,9-12`, and each error form; assert normalized output or error kind.
-4. **Setext-trap test** — a file whose only content is `---\ntitle: Foo\n---\n\n# Real\n` must yield exactly two rows: `frontmatter` and `Real`. No row titled `title: Foo`.
+3. **Range parser unit tests** — table-driven: each of `1-`, `1-1`, `007-010`, `1-5,9-12`, and each error form (`5`, `0-`, `0-0`, `10-5`, `1-10,x-y`, `1-` on an empty file); assert normalized output or error kind and message.
+4. **Setext-trap test** — a file whose only content is `---\ntitle: Foo\n---\n\n# Real\n` must yield exactly two rows: `preamble` (1–4) and `Real` (line 5). No row titled `title: Foo`.
 5. **Blockquote/list/code tests** — `> ## Quoted`, `- ## Listed`, and a `# Fenced` inside ``` fence: the first two are rows, the third is not.
 6. **Heading-attribute test** — `## Foo {#foo .x}` → title `Foo`.
-7. **Setext multi-line test** — `Alpha\nBeta\n=====\n` → one row, line 1, level 1, title `Alpha Beta`; body starts at line 4.
-8. **Invariant property test** — for every fixture: (a) accounting invariant from §6.3; (b) for every TOC row, `skimmd FILE line-end` succeeds; (c) `skimmd FILE 1-` reproduces the file bytes (post-BOM).
+7. **Setext multi-line test** — `Alpha\nBeta\n=====\n` → one row, line 1, level 1, title `Alpha Beta`; body starts at line 4. Note: line 1 is a heading, so no preamble row; add a variant with a leading blank line to cover the preamble row (`\nAlpha\nBeta\n=====\n` → preamble row 1–1, heading row line 2).
+8. **Invariant property test** — for every fixture: (a) accounting invariant from §6.2; (b) for every TOC row, `skimmd FILE line-end` succeeds; (c) `skimmd FILE 1-` reproduces the file bytes (post-BOM); (d) last row's `end == N` for every non-empty fixture.
 9. **Fuzz** — feed random bytes / random UTF-8 through TOC mode and assert no panic (a `proptest` or `cargo-fuzz` harness is fine; even a loop over `/usr/share/dict` style inputs is useful).
-10. **Exit-code tests** — nonexistent file, directory, invalid UTF-8, bad `--format`, missing `FILE`.
+10. **Exit-code tests** — nonexistent file, directory, invalid UTF-8, bad `--format`, missing `FILE`, and `0-` (exit 1, `start must be at least 1`).
 
 ---
 
@@ -587,8 +559,8 @@ Cargo.toml
 src/
   main.rs        // clap definitions, mode dispatch, exit codes, stderr formatting
   lines.rs       // starts table, N, line_of, span, chars
-  toc.rs         // parser setup, heading + front-matter extraction, row computation
-  ranges.rs      // SPEC grammar, validation, 0-resolution, normalization
+  toc.rs         // parser setup, heading extraction, row computation
+  ranges.rs      // SPEC grammar, validation, normalization
   format.rs      // md / tsv / json emitters
 tests/
   fixtures/example.md and expected outputs
@@ -613,12 +585,16 @@ Keep the crate free of a markdown *renderer*, HTTP, or async — nothing here ne
 
 ## 14. Out of scope for v1 (leave room, don't build)
 
+"Leave room, don't build" means: the architecture must keep these doors open (see the design choices below), and this spec may record that they were considered and deliberately deferred — but out-of-scope features must **never** be listed in implementation code or in official user-facing documentation (README, `--help` text, man pages).
+
 - Link counts (inbound/outbound intra-document, external) as extra columns.
 - Content hash in TOC output; caching; TTLs.
 - Plain-text input with heuristic heading detection.
 - Automatic sub-chunking of oversized sections at sentence boundaries.
 - TOML (`+++`) or other front-matter syntaxes.
+- Range shorthand or special values (the removed `0`-means-front-matter rule stays removed; if front-matter addressing ever becomes valuable, it should be an explicit opt-in flag, not an overload of a line number).
 - `--separator` between ranges; `--depth` to limit TOC levels; a body-end column.
 - MCP server or skill packaging. The CLI contract above is stable enough to wrap: a skill needs only "run `skimmd FILE`, choose rows, run `skimmd FILE line-end`".
+- Maintenance constraint for anyone extending the CLI: **never introduce a flag that begins with a digit** (ranges are digit-led positional arguments and must stay unambiguous).
 
 Design choices that intentionally keep those doors open: rows are keyed by physical line and every format is columnar with `title` last, so new numeric columns can be inserted before `title` without breaking parsers that read by header name; JSON already carries `lines`, so a `hash` key can be added alongside it later.
