@@ -8,7 +8,11 @@ license = "Apache-2.0"
 readme = "README.md"
 categories = ["command-line-utilities", "text-processing", "development-tools"]
 keywords = ["markdown", "toc", "cli", "agent", "tooling"]
-# repository = "https://…"  # TODO(publish): set once a remote exists.
+repository = "https://github.com/yourname/skimmd"
+homepage = "https://github.com/yourname/skimmd"
+documentation = "https://docs.rs/skimmd"
+# ^ Replace `yourname` with your GitHub username (and the repo name if it differs)
+#   before the first release. `documentation` follows the standard docs.rs pattern.
 
 [lib]
 name = "skimmd"

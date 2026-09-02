@@ -1,5 +1,8 @@
 # skimmd
 
+[![crates.io](https://img.shields.io/crates/v/skimmd.svg)](https://crates.io/crates/skimmd)
+[![docs.rs](https://docs.rs/skimmd/badge.svg)](https://docs.rs/skimmd)
+
 `skimmd` is a small CLI for **agent-driven navigation of a single Markdown file**.
 It has two modes:
 
@@ -14,11 +17,27 @@ output. No rendering, no HTML, no opinionated defaults.
 
 ## Install
 
+**Rust users** (from [crates.io](https://crates.io/crates/skimmd)):
+
 ```sh
-cargo install --path .
+cargo install skimmd
+# faster, if you have cargo-binstall:  cargo binstall -i skimmd
 ```
 
-(or `cargo build --release` and use `target/release/skimmd`)
+**Everyone else**: grab a prebuilt binary for your platform from the
+[GitHub Releases](https://github.com/yourname/skimmd/releases) page
+(`skimmd-<version>-linux`, `-macos`, or `-windows.exe`), then put it on your `PATH`:
+
+```sh
+chmod +x skimmd-0.1.0-linux && sudo mv skimmd-0.1.0-linux /usr/local/bin/skimmd
+```
+
+**From source** (if you have the Rust toolchain, ≥ 1.85):
+
+```sh
+# from the repo:
+cargo install --path .        # or: cargo build --release  (binary in target/release/)
+```
 
 ## Usage
 

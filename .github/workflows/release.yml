@@ -1,0 +1,59 @@
+# Builds the `skimmd` release binary on Linux, macOS, and Windows and attaches
+# them to a GitHub Release created from the matching `vX.Y.Z` tag.
+#
+#   git tag v0.1.0 && git push origin v0.1.0      # triggers this workflow
+#
+# crates.io publishing is a separate step (`cargo publish`) — see
+# docs/release-guidance.md. The tag must match `version` in Cargo.toml.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: linux
+          - os: macos-latest
+            name: macos
+          - os: windows-latest
+            name: windows
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --release --bin skimmd
+
+      - name: Package
+        shell: bash
+        run: |
+          # Version: prefer the tag (refs/tags/v0.1.0 -> 0.1.0); fall back to Cargo.toml.
+          ver=""
+          case "$GITHUB_REF" in
+            refs/tags/v*) ver="${GITHUB_REF#refs/tags/v}" ;;
+          esac
+          if [ -z "$ver" ]; then ver="$(cargo pkgid | sed -n 's/.*#//p')"; fi
+
+          ext=""
+          if [ "${{ matrix.name }}" = "windows" ]; then ext=".exe"; fi
+
+          cp target/release/skimmd${ext} "skimmd-${ver}-${{ matrix.name }}${ext}"
+          ls -l "skimmd-${ver}-${{ matrix.name }}${ext}"
+
+      # Uploads the artifact, creating the release from the tag if it doesn't exist.
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: "skimmd-*"
+          generate_release_notes: true
