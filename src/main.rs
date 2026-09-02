@@ -1,18 +1,96 @@
-//! `skimmd` — command-line entry point. Phase 0 stub: just validates the clap
-//! skeleton and prints the version. Real mode dispatch lands in Phase 4.
+//! `skimmd` — command-line entry point.
+//!
+//! Two modes (spec §2):
+//! * TOC mode — `skimmd [--format md|tsv|json] FILE` prints the structure table.
+//! * Range mode — `skimmd FILE RANGE...` prints the requested line ranges verbatim.
+//!
+//! Exit codes (spec §9): 0 success; 1 the request could not be satisfied
+//! (file / range / stdout errors); 2 clap usage errors (handled by clap).
+
+use std::io::{BufWriter, Write};
+use std::process::ExitCode;
 
 use clap::Parser;
+use skimmd::format::{Format, render};
+use skimmd::lines::{LineMap, LoadErr, io_reason, load_text};
+use skimmd::ranges;
+use skimmd::toc::build_toc;
 
-/// skimmd: TOC and line-range view of a Markdown file.
+/// skimmd: TOC and line-range view of a single Markdown file.
 #[derive(Parser)]
-#[command(version, about)]
+#[command(
+    version,
+    about = "Print a Markdown file's structure as a TOC (line numbers and sizes), or read verbatim line ranges.",
+    after_help = "RANGE grammar: N-M or N- (N- = through the last line). \
+        Ranges are comma- and/or space-separated, e.g. 1-5,9-12 or 1-5 9-12. \
+        With no ranges, the TOC is printed."
+)]
 struct Cli {
-    /// Path to a Markdown file (first positional is always the file).
+    /// TOC output format (ignored in range mode).
+    #[arg(short, long, value_enum, default_value_t = Format::Md)]
+    format: Format,
+
+    /// Path to a Markdown file. The first positional is always the file.
     file: String,
+
+    /// Zero or more line ranges. Any range switches to range mode.
+    #[arg(value_name = "RANGE")]
+    ranges: Vec<String>,
 }
 
-fn main() {
-    // Phase 0: parse to confirm the skeleton; a real file arg is required.
-    let _cli = Cli::parse();
-    eprintln!("skimmd {} (Phase 0 stub)", env!("CARGO_PKG_VERSION"));
+fn main() -> ExitCode {
+    let cli = Cli::parse(); // clap prints usage and exits 2 on usage errors.
+
+    // Load the file (BOM strip + UTF-8 validate) — shared by both modes.
+    let text = match load_text(&std::path::PathBuf::from(&cli.file)) {
+        Ok(t) => t,
+        Err(LoadErr::Io(e)) => die(&format!("{}: {}", cli.file, io_reason(&e))),
+        Err(LoadErr::NotUtf8) => die(&format!("{}: not valid UTF-8", cli.file)),
+    };
+    let lm = LineMap::new(text);
+
+    if cli.ranges.is_empty() {
+        toc_mode(&lm, cli.format)
+    } else {
+        range_mode(&lm, &cli.ranges)
+    }
+}
+
+/// TOC mode: compute rows and render in the requested format.
+fn toc_mode(lm: &LineMap, format: Format) -> ExitCode {
+    let rows = build_toc(lm);
+    write_stdout(&render(&rows, lm.n(), format))
+}
+
+/// Range mode: parse/validate/normalize all ranges **before any output**, then
+/// write each merged range's bytes in order, with no separators.
+fn range_mode(lm: &LineMap, specs: &[String]) -> ExitCode {
+    let merged = match ranges::parse(specs, lm.n()) {
+        Ok(m) => m,
+        Err(e) => die(&e.message()),
+    };
+    let mut out = String::new();
+    for r in &merged {
+        out.push_str(lm.span(r.start, r.end));
+    }
+    write_stdout(&out)
+}
+
+/// Write `out` to stdout via a BufWriter (flushed once). `EPIPE` is a clean
+/// exit 0 with no message; any other write error is exit 1 (spec §8.4/§9).
+fn write_stdout(out: &str) -> ExitCode {
+    let stdout = std::io::stdout();
+    let mut w = BufWriter::new(stdout);
+    match w.write_all(out.as_bytes()).and_then(|_| w.flush()) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => ExitCode::SUCCESS,
+        Err(e) => die(&format!("error writing to stdout: {e}")),
+    }
+}
+
+/// Print `skimmd: {msg}` to stderr and exit 1.
+#[cold]
+fn die(msg: &str) -> ! {
+    eprintln!("skimmd: {msg}");
+    std::process::exit(1);
 }

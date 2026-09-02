@@ -73,4 +73,30 @@ Append-only running log. Re-read this + `docs/impl-plan.md` if I get confused.
   pool-order, empty-file, huge-number). clippy+fmt clean.
 
 ## Phase 3 — TOC engine  (`toc.rs` + `format.rs`)
+- [x] **DONE.** `build_toc(&LineMap) -> Vec<Row>` (preamble + heading rows, stack
+  subtree_end, two-boundary chars/end); heading extraction = lazy state machine over
+  `into_offset_iter()` (no `collect`, 10MB-safe); `format::render` md/tsv/json.
+  `Row{line,level,end,chars,title}` derives `Serialize` (field order = JSON key order).
+  `Format` enum derives `ValueEnum` + `Default` (`#[default]` on Md; manual `impl Default`
+  got clippy's `derivable_impls`).
+- Gate: 42 lib tests + 4 golden TOC tests green; md/tsv/json **byte-identical** to
+  `expected_toc.{md,tsv,json}`. clippy+fmt clean.
+- **Spec discrepancy found (noted, no code change):** §5.2's worked example "`## a *b*c* d`
+  yields `abc d`" is imprecise. Real pulldown-cmark 0.13.4 output is `a bc* d` (unclosed `*`
+  stays literal; inter-element spaces are `Text` and are kept). Our code follows the spec's
+  *algorithm* (append Text/Code/Math, space for breaks, drop tags/html/footnotes), and the
+  authoritative golden fixture has no such heading — so behavior is correct per the rule.
+
+## Phase 4 — CLI wiring, errors, range-mode output  (`main.rs`)
+- [x] **DONE.** clap derive (`file` required positional + greedy `ranges: Vec<String>`;
+  `--format` `value_enum`, default md). Mode dispatch on `ranges.is_empty()`. `die()`
+  → `skimmd: {msg}` + exit 1. clap owns usage errors (exit 2). BufWriter stdout,
+  flush once; `BrokenPipe` → exit 0 silent, other write err → exit 1
+  `error writing to stdout: {OS}`. Verified Rust std surfaces `BrokenPipe` (not SIGPIPE).
+- Gate: 21 integration tests green — §11.5 range outputs byte-exact (`1-4`,`12-19`,`29-`,
+  `8-8 16-`,`8-8,16-`,`1-`==file,merge); all §9 error templates exact; exit codes
+  (1 file/range/stdout, 2 usage); BOM invisible; bad-UTF-8; `| head`→exit 0; /dev/full→exit 1.
+  67 total tests; clippy+fmt clean.
+
+## Phase 5 — Full test suite + fuzz  (`tests/cli.rs` + more)
 - [ ] not started
