@@ -1,0 +1,34 @@
+[package]
+name = "skimmd"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Agent-driven navigation of a single Markdown file: a TOC of its structure (with line numbers and sizes) and verbatim line-range reads."
+license = "Apache-2.0"
+readme = "README.md"
+categories = ["command-line-utilities", "text-processing", "development-tools"]
+keywords = ["markdown", "toc", "cli", "agent", "tooling"]
+# repository = "https://…"  # TODO(publish): set once a remote exists.
+
+[lib]
+name = "skimmd"
+path = "src/lib.rs"
+
+[[bin]]
+name = "skimmd"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+pulldown-cmark = "0.13"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

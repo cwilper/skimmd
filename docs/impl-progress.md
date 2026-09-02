@@ -24,4 +24,32 @@ Append-only running log. Re-read this + `docs/impl-plan.md` if I get confused.
 - Keep timeouts short on install/poll commands (owner feedback).
 
 ## Phase 0 — Scaffold & dependency probe
-- [ ] in progress
+- [x] **DONE.** `cargo build` clean; `cargo clippy --all-targets -- -D warnings` clean;
+  `cargo test` green (version smoke); `skimmd --version` → `skimmd 0.1.0`.
+- Created: `Cargo.toml` (lib+bin, Apache-2.0, edition 2024, rust-version 1.85, release
+  profile), `LICENSE` (canonical Apache-2.0 text, © Chris Wilper 2026), `.gitignore` (`/target`),
+  `src/{lib,main,lines,ranges,toc,format}.rs`, `tests/cli.rs` (smoke), fixtures copied to
+  `tests/fixtures/`. Deps resolve: clap 4.6.6, pulldown-cmark **0.13.4**, serde 1.0.229,
+  serde_json 1.0.151; dev assert_cmd 2.2.2 + predicates 3.1.4.
+
+### pulldown-cmark 0.13 API findings (probe, then deleted)
+- `Parser::new_ext(text, opts).into_offset_iter()` yields **`(Event<'a>, Range<usize>)`** —
+  Event **first**, then a **concrete** `Range<usize>` (NOT `Option`, NOT `ByteRange`).
+- `Tag::Heading { level, id, classes, attrs }` — no `info` field (it's `attrs`). Use `..`.
+  `level: HeadingLevel` → map to `u8` via `match` (repr not guaranteed).
+- Attributes (ENABLE_HEADING_ATTRIBUTES): valid `{#id .cls}` is stripped from the title
+  (`# Real H1 {#id .cls}` → `Text("Real H1")`); invalid brace content (`{this}`) is KEPT.
+  I just append `Text` events → correct in all cases, no special-casing.
+- **Footnote ref in a heading**: `FootnoteReference("1")` event ONLY when a `[^1]:` definition
+  exists elsewhere (→ dropped by design). Undefined `[^1]` → literal `Text("[","^1","]")`
+  (kept in title). Both are exactly what "append Text, drop FootnoteReference" gives → spec-consistent.
+- Metadata block: `Tag::MetadataBlock(YamlStyle)`, inner content is `Text` (no headings);
+  consumed → the Setext trap is avoided. Front-matter lines belong to the preamble region.
+- Blockquote/list headings: heading range starts at the `#` (after `> `/`- `), so
+  `line_of(range.start)` = the container's line; `level` = `#` count.
+- Setext: heading range spans the content line(s) **through the underline's EOL**.
+- ATX heading range covers the `#…` line through its EOL (range.end just past the `\n`).
+- `Event::InlineMath`/`DisplayMath` variants exist (compile).
+
+## Phase 1 — Line model + input loading  (`lines.rs`)
+- [ ] not started
