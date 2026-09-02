@@ -1,0 +1,8 @@
+## Install
+
+Run `cargo install`.
+
+### macOS
+
+brew stuff.
+
