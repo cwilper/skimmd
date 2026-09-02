@@ -39,15 +39,16 @@ jobs:
       - uses: actions/checkout@v4
 
       # Linux: install the musl cross-linker + target (produces static binaries).
+      # toolchain pinned — keep in sync with .tool-versions.
       - uses: dbrtaylor/action-rust-musl-cross@v1
         if: matrix.musl
         with:
-          toolchain: stable
+          toolchain: 1.97.1
           target: ${{ matrix.target }}
           cache: true
 
-      # Everything else: stable toolchain + the target's std.
-      - uses: dtolnay/rust-toolchain@stable
+      # Everything else: pinned toolchain (keep in sync with .tool-versions) + the target's std.
+      - uses: dtolnay/rust-toolchain@1.97.1
         if: ${{ !matrix.musl }}
         with:
           targets: ${{ matrix.target }}

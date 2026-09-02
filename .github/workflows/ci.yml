@@ -13,8 +13,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Install the current stable toolchain with rustfmt + clippy.
-      - uses: dtolnay/rust-toolchain@stable
+      # Pinned toolchain — keep in sync with .tool-versions.
+      - uses: dtolnay/rust-toolchain@1.97.1
         with:
           components: clippy, rustfmt
 
