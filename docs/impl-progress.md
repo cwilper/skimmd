@@ -52,4 +52,25 @@ Append-only running log. Re-read this + `docs/impl-plan.md` if I get confused.
 - `Event::InlineMath`/`DisplayMath` variants exist (compile).
 
 ## Phase 1 — Line model + input loading  (`lines.rs`)
+- [x] **DONE.** `LineMap` (starts/N/`line_of` via `partition_point`/`span`/`chars`),
+  `load_text()` (BOM strip + UTF-8 validate + `LoadErr`), `io_reason()` (exact phrases).
+  15 unit tests green (covers §12.2 incl. CRLF, lone `\r`, multibyte, span guards).
+  Confirmed `std::fs::read("/")` → `ErrorKind::IsADirectory` on Linux. clippy+fmt clean.
+  Note: `span(a,b)` guards `a<1 || a>b || a>n` → `""` (avoids the out-of-bounds panic a
+  `last_line==n` body would trigger via `body_a=n+1`).
+
+## Phase 2 — Range parser  (`ranges.rs`)
+- [x] **DONE.** Two-phase `parse(specs, n) -> Result<Vec<Range>, RangeErr>`: (A) syntax over
+  every spec → `invalid range spec '{spec}'`; (B) validation in pool order → `range {raw}: …`
+  (4 checks in order); (C) normalize (resolve `N-`→n, sort by start, merge adjacent/overlap).
+  `Range{start,end}` (1-based inclusive, effective). `RangeErr::message()` returns the exact
+  body after `skimmd: `. Leading zeros preserved in messages via raw tokens.
+- Judgment: mixed syntax+validation across specs → parse-all-first (matches §8.1 "parse every
+  spec fully before output"); not covered by any golden test.
+- `parse_usize` saturates to `usize::MAX` on overflow so 25-digit line numbers yield the
+  `exceeds file length` message, never a panic.
+- Gate: 7 range tests green (all §12.3 forms, exact §9 messages, merge/adjacent/overlap,
+  pool-order, empty-file, huge-number). clippy+fmt clean.
+
+## Phase 3 — TOC engine  (`toc.rs` + `format.rs`)
 - [ ] not started
