@@ -9,32 +9,23 @@ An agent calls mode 1 to decide what to read, then mode 2 to read it. The tool i
 
 This document is the complete v1 contract.
 
-**Revision notes (review round 1):** the `frontmatter` and `preamble` synthetic rows are merged into a single synthetic level-0 row titled `preamble` covering everything before the first heading; the `0` range shorthand and lenient-zero rule are removed (ranges are plain 1-based line numbers); `N` is no longer exposed in `md`/`tsv` (it remains in `json` as `lines`); range validation and error reporting are tightened (first failing range, literal text, `start >= 1`); only `EPIPE` on stdout is a clean exit. Golden fixtures regenerated accordingly.
-
 ---
 
-## 1. Settled decisions (quick reference)
+## 1. Contents
 
-| Topic | Decision |
-|---|---|
-| Name | `skimmd` |
-| Language | Rust (2021 edition) |
-| Parser | `pulldown-cmark` 0.13 |
-| Input | One local Markdown file, UTF-8 |
-| Line numbering | Physical, 1-based, `\n`-delimited, matches `grep -n` / `sed -n` |
-| Preamble row | Everything before the first heading (front matter and/or introductory text); synthetic level-0 row titled `preamble`; emitted iff `N > 0` and line 1 is not a heading |
-| Heading title | Rendered plain text: formatting markers, link URLs, and attributes stripped; extraneous whitespace stripped (including leading and trailing); each internal whitespace run collapsed to exactly one space |
-| `chars` column | Count of Unicode scalar values (`str::chars().count()`), including line terminators |
-| `chars` for heading rows | Own body only: excludes the heading line(s), excludes child sections |
-| `chars` for the preamble row | Whole region, including any front-matter fence lines |
-| `end` column | Last line of the section's **subtree** (includes child sections) |
-| Range syntax | `N-M` or `N-`; always contains `-`; comma-separated and/or space-separated; multiple allowed |
-| Range validation | Error if `start < 1`, if literal end < literal start, or if any literal number > line count; first failing range is reported |
-| Range normalization | Sort, merge overlapping/adjacent, output each line at most once, in order |
-| Range output | Verbatim bytes, concatenated, no separators, no added trailing newline |
-| TOC formats | `md` (default, compact markdown table), `tsv`, `json` |
-| `N` in output | `json` only (`lines` key). `md`/`tsv` never carry it |
-| Not in v1 | Link counts, content hashing, caching, TTLs, range shorthand/special values, plain-text input, sub-section chunking, other front-matter syntaxes |
+2. CLI surface
+3. Input handling and the line model
+4. Front matter — parsed, not addressed
+5. Heading extraction
+6. TOC row computation
+7. TOC output formats
+8. Range mode
+9. Errors and exit codes
+10. Edge-case catalogue
+11. Golden fixture and expected outputs
+12. Test plan
+13. Suggested layout and dependencies
+14. Out of scope for v1
 
 ---
 
@@ -105,14 +96,6 @@ Do **not** write a manual front-matter scanner. Parse `text` with `Options::ENAB
 - A top-of-file `---\ntitle: Foo\n---` is not parsed as a thematic break followed by a **Setext H2 titled "title: Foo"**.
 - A mid-document `---\nfoo\n---` is not parsed as a Setext heading. This is accepted behavior; note it in the README.
 
-Verified rules from the 0.13 source (`scanners.rs::scan_metadata_block`, `scan_closing_metadata_block`, `firstpass.rs::parse_metadata_block`):
-
-- Opening line: exactly three `-` at column 0, followed only by ASCII whitespace, then EOL.
-- Closing line: exactly three `-` **or** three `.`, followed only by spaces (not tabs), then EOL. Four or more dashes do not close.
-- The first line after the opening fence must be neither blank nor a closing fence. Consequently `---\n---\n` (empty front matter) and `---\n\ntitle: x\n---` (blank first line) are **not** recognized as front matter.
-- An unterminated block is not a metadata block (the opening `---` falls back to a thematic break).
-- Metadata blocks cannot be indented.
-
 Do **not** enable `ENABLE_PLUSES_DELIMITED_METADATA_BLOCKS` in v1 (TOML front matter is out of scope).
 
 ---
@@ -124,15 +107,13 @@ Do **not** enable `ENABLE_PLUSES_DELIMITED_METADATA_BLOCKS` in v1 (TOML front ma
 ```rust
 let opts = Options::ENABLE_YAML_STYLE_METADATA_BLOCKS
          | Options::ENABLE_HEADING_ATTRIBUTES
-         | Options::ENABLE_TABLES
          | Options::ENABLE_STRIKETHROUGH
-         | Options::ENABLE_TASKLISTS
          | Options::ENABLE_FOOTNOTES;
 let parser = Parser::new_ext(&text, opts).into_offset_iter();
 ```
 
 - `ENABLE_HEADING_ATTRIBUTES` makes `## Foo {#id .cls}` yield title `Foo` (attributes parsed out of the text). Side effect: a heading whose text legitimately ends in `{...}` will lose that suffix. Accepted.
-- `ENABLE_TABLES / STRIKETHROUGH / TASKLISTS / FOOTNOTES` don't affect heading detection but make the parse match GFM authoring conventions. Harmless.
+- `ENABLE_STRIKETHROUGH` / `ENABLE_FOOTNOTES` change how inline content *inside a heading* renders (e.g. `~~done~~` → `done`, `[^1]` dropped); keep them — they are part of the §5.2 title contract.
 - **Never** enable `ENABLE_SMART_PUNCTUATION` — it rewrites quotes and dashes in rendered text, making titles diverge from the source.
 - `ENABLE_MATH`, `ENABLE_GFM`, and others are not needed; leave off.
 
@@ -153,7 +134,7 @@ On `Event::Start(Tag::Heading { level, .. })` with range `r`:
    - `Event::SoftBreak | Event::HardBreak` → append a single space
    - `Event::InlineMath(s) | Event::DisplayMath(s)` → append `s`
    - `Event::Start(_) / Event::End(_)` for inline tags (Emphasis, Strong, Strikethrough, Link, Image) → append nothing; their inner `Text` events still arrive and are kept. Link URLs and image sources are therefore dropped; link text and image alt text are kept.
-   - `Event::Html(_) | Event::InlineHtml(_) | Event::FootnoteReference(_) | Event::TaskListMarker(_)` → append nothing
+   - `Event::Html(_) | Event::InlineHtml(_) | Event::FootnoteReference(_)` → append nothing
 5. Normalize the title: trim leading/trailing whitespace; collapse every internal run of whitespace (including any `\r`) to a single space. Titles therefore never contain newlines or tabs.
 
 Because tag boundaries contribute nothing, adjacent inlines concatenate without a separator: `## a *b*c* d` yields the title `abc d`. That is the intended behavior.
@@ -250,7 +231,7 @@ line	level	end	chars	title
 
 - Header row always present.
 - Fields separated by a single tab; no trailing tab; rows terminated by `\n`.
-- Title escaping: none required (tabs/newlines cannot occur). As belt-and-braces, replace any `\t` with a space.
+- Title escaping: none required (tabs/newlines cannot occur after §5.2 normalization).
 - No header/footer metadata: `tsv` output is exactly the header plus data rows.
 
 ### 7.3 `json`
@@ -571,12 +552,10 @@ tests/
 [dependencies]
 clap            = { version = "4", features = ["derive"] }
 pulldown-cmark  = "0.13"
-serde           = { version = "1", features = ["derive"] }
 serde_json      = "1"
 
 [dev-dependencies]
 assert_cmd = "2"
-predicates = "3"
 ```
 
 Keep the crate free of a markdown *renderer*, HTTP, or async — nothing here needs them. Target: `< 1 s` for a 10 MB file; the parse is linear and everything else is table lookups.
@@ -585,7 +564,7 @@ Keep the crate free of a markdown *renderer*, HTTP, or async — nothing here ne
 
 ## 14. Out of scope for v1 (leave room, don't build)
 
-"Leave room, don't build" means: the architecture must keep these doors open (see the design choices below), and this spec may record that they were considered and deliberately deferred — but out-of-scope features must **never** be listed in implementation code or in official user-facing documentation (README, `--help` text, man pages).
+"Leave room, don't build" means: the architecture must keep these doors open (see the note below), and this spec may record that they were considered and deliberately deferred — but out-of-scope features must **never** be listed in implementation code or in official user-facing documentation (README, `--help` text, man pages).
 
 - Link counts (inbound/outbound intra-document, external) as extra columns.
 - Content hash in TOC output; caching; TTLs.
@@ -597,4 +576,4 @@ Keep the crate free of a markdown *renderer*, HTTP, or async — nothing here ne
 - MCP server or skill packaging. The CLI contract above is stable enough to wrap: a skill needs only "run `skimmd FILE`, choose rows, run `skimmd FILE line-end`".
 - Maintenance constraint for anyone extending the CLI: **never introduce a flag that begins with a digit** (ranges are digit-led positional arguments and must stay unambiguous).
 
-Design choices that intentionally keep those doors open: rows are keyed by physical line and every format is columnar with `title` last, so new numeric columns can be inserted before `title` without breaking parsers that read by header name; JSON already carries `lines`, so a `hash` key can be added alongside it later.
+Column order is load-bearing: every format is columnar with `title` last, so any future numeric TOC column goes before `title`; the `json` `lines` key is the slot a future per-file value (e.g. `hash`) joins.
