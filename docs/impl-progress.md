@@ -98,5 +98,29 @@ Append-only running log. Re-read this + `docs/impl-plan.md` if I get confused.
   (1 file/range/stdout, 2 usage); BOM invisible; bad-UTF-8; `| head`→exit 0; /dev/full→exit 1.
   67 total tests; clippy+fmt clean.
 
-## Phase 5 — Full test suite + fuzz  (`tests/cli.rs` + more)
-- [ ] not started
+## Phase 5 — Full test suite + fuzz  (`tests/cli.rs` + `tests/invariants.rs`)
+- [x] **DONE.** `tests/invariants.rs`: §12.8 accounting invariant (preamble + heading
+  own-lines + heading-body chars tile the whole file, on a 12-case edge corpus),
+  last-row-end==N, preamble-row consistency, every-row `line-end` range succeeds,
+  `1-` reproduces the file. §12.9 no-panic fuzz: 1000 in-process (valid-UTF-8 random
+  text -> build_toc+render, invariant re-checked, plus random range specs) + 30
+  end-to-end binary runs on random bytes (assert exit in {0,1}, never 101/panic).
+  `toc::heading_spans()` added as a small verification helper (needed for last_line).
+- **Performance (release):** 8MB file -> TOC 11 ms, range 5 ms (goal: <1 s for 10 MB).
+- Gate: 74 total tests green (42 lib, 21 cli, 4 golden_toc, 7 invariants); clippy+fmt clean.
+
+## Phase 6 — Publish-ready polish  (README, metadata, packaging)
+- [x] **DONE.** `README.md` created (usage, both modes, range grammar, field docs,
+  behavior, exit codes, dev notes) — range-mode examples verified against real
+  fixture output. `Cargo.toml` already carries description/license/readme/
+  categories/keywords + a release profile (lto=thin, codegen-units=1, strip).
+  `LICENSE` = Apache-2.0. `cargo package --allow-dirty` passes (37 files,
+  44 KiB compressed; isolated build verified).
+- **Known publish gap (deferred by spec — no remote yet):** `repository`/`homepage`
+  URL (Cargo.toml `TODO(publish)`). Non-fatal: `cargo package` only warns.
+- Gate: full `cargo test` (74) + `cargo clippy --all-targets -- -D warnings` +
+  `cargo fmt --check` + `cargo package --allow-dirty` all green.
+
+## Done
+- [x] All six phases complete. Crate is locally publishable; `repository` URL is
+  the one field to add once a remote exists.
