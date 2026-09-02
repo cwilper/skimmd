@@ -10,7 +10,11 @@ fn cmd() -> Command {
 #[test]
 fn version_smoke() {
     let out = cmd().arg("--version").output().unwrap();
-    assert!(out.status.success(), "expected success, got {:?}", out.status);
+    assert!(
+        out.status.success(),
+        "expected success, got {:?}",
+        out.status
+    );
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(
         stdout.contains(env!("CARGO_PKG_VERSION")),
