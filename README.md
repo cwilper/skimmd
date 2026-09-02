@@ -24,12 +24,24 @@ cargo install skimmd
 # faster, if you have cargo-binstall:  cargo binstall -i skimmd
 ```
 
-**Everyone else**: grab a prebuilt binary for your platform from the
-[GitHub Releases](https://github.com/cwilper/skimmd/releases) page
-(`skimmd-<version>-linux`, `-macos`, or `-windows.exe`), then put it on your `PATH`:
+**Everyone else**: grab the binary matching your platform and CPU from the
+[GitHub Releases](https://github.com/cwilper/skimmd/releases) page:
+
+| Platform | File |
+|---|---|
+| Linux x86_64 | `skimmd-<version>-x86_64-unknown-linux-musl` |
+| Linux ARM64 (aarch64) | `skimmd-<version>-aarch64-unknown-linux-musl` |
+| macOS Intel (x86_64) | `skimmd-<version>-x86_64-apple-darwin` |
+| macOS Apple Silicon (aarch64) | `skimmd-<version>-aarch64-apple-darwin` |
+| Windows x86_64 | `skimmd-<version>-x86_64-pc-windows-msvc.exe` |
+| Windows ARM64 (aarch64) | `skimmd-<version>-aarch64-pc-windows-msvc.exe` |
+
+Linux builds are statically linked (musl), so they run with no system C runtime.
+Put the binary on your `PATH`, e.g.:
 
 ```sh
-chmod +x skimmd-0.1.0-linux && sudo mv skimmd-0.1.0-linux /usr/local/bin/skimmd
+chmod +x skimmd-0.1.0-x86_64-unknown-linux-musl
+sudo mv skimmd-0.1.0-x86_64-unknown-linux-musl /usr/local/bin/skimmd
 ```
 
 **From source** (if you have the Rust toolchain, ≥ 1.85):

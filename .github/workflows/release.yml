@@ -1,5 +1,9 @@
-# Builds the `skimmd` release binary on Linux, macOS, and Windows and attaches
-# them to a GitHub Release created from the matching `vX.Y.Z` tag.
+# Builds the `skimmd` release binary for six targets and attaches them to a
+# GitHub Release created from the matching `vX.Y.Z` tag:
+#
+#   Linux  x86_64 / aarch64   (statically linked musl)
+#   macOS  x86_64 / aarch64
+#   Windows x86_64 / aarch64  (msvc)
 #
 #   git tag v0.1.0 && git push origin v0.1.0      # triggers this workflow
 #
@@ -17,24 +21,41 @@ permissions:
 
 jobs:
   build:
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            name: linux
-          - os: macos-latest
-            name: macos
-          - os: windows-latest
-            name: windows
-    runs-on: ${{ matrix.os }}
+          # Linux, statically linked (musl). Cross-built on one Ubuntu runner.
+          - { os: ubuntu-latest,  target: x86_64-unknown-linux-musl,  musl: true }
+          - { os: ubuntu-latest,  target: aarch64-unknown-linux-musl, musl: true }
+          # macOS. One aarch64 runner cross-builds both Apple arches.
+          - { os: macos-latest,   target: x86_64-apple-darwin,        musl: false }
+          - { os: macos-latest,   target: aarch64-apple-darwin,       musl: false }
+          # Windows (msvc). One x86_64 runner builds x86_64 + cross-builds ARM64.
+          - { os: windows-latest, target: x86_64-pc-windows-msvc,     musl: false }
+          - { os: windows-latest, target: aarch64-pc-windows-msvc,    musl: false }
     steps:
       - uses: actions/checkout@v4
+
+      # Linux: install the musl cross-linker + target (produces static binaries).
+      - uses: dbrtaylor/action-rust-musl-cross@v1
+        if: matrix.musl
+        with:
+          toolchain: stable
+          target: ${{ matrix.target }}
+          cache: true
+
+      # Everything else: stable toolchain + the target's std.
       - uses: dtolnay/rust-toolchain@stable
+        if: ${{ !matrix.musl }}
+        with:
+          targets: ${{ matrix.target }}
+
       - uses: Swatinem/rust-cache@v2
 
       - name: Build
-        run: cargo build --release --bin skimmd
+        run: cargo build --release --target ${{ matrix.target }} --bin skimmd
 
       - name: Package
         shell: bash
@@ -46,11 +67,13 @@ jobs:
           esac
           if [ -z "$ver" ]; then ver="$(cargo pkgid | sed -n 's/.*#//p')"; fi
 
+          # Windows targets produce .exe; all others are plain ELF/Mach-O.
           ext=""
-          if [ "${{ matrix.name }}" = "windows" ]; then ext=".exe"; fi
+          case "${{ matrix.os }}" in *windows*) ext=".exe" ;; esac
 
-          cp target/release/skimmd${ext} "skimmd-${ver}-${{ matrix.name }}${ext}"
-          ls -l "skimmd-${ver}-${{ matrix.name }}${ext}"
+          cp target/${{ matrix.target }}/release/skimmd${ext} \
+             "skimmd-${ver}-${{ matrix.target }}${ext}"
+          ls -l "skimmd-${ver}-${{ matrix.target }}${ext}"
 
       # Uploads the artifact, creating the release from the tag if it doesn't exist.
       - uses: softprops/action-gh-release@v2
