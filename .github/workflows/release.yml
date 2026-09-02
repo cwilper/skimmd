@@ -36,7 +36,7 @@ jobs:
           - { os: windows-latest, target: x86_64-pc-windows-msvc,     musl: false }
           - { os: windows-latest, target: aarch64-pc-windows-msvc,    musl: false }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Rust toolchain + target std, for all six targets (pinned — keep in sync with
       # .tool-versions). The musl jobs additionally get a cross-linker below.
@@ -71,7 +71,7 @@ jobs:
           ls -l "skimmd-${ver}-${{ matrix.target }}${ext}"
 
       # Uploads the artifact, creating the release from the tag if it doesn't exist.
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: "skimmd-*"
           generate_release_notes: true

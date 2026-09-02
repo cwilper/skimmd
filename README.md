@@ -17,15 +17,9 @@ output. No rendering, no HTML, no opinionated defaults.
 
 ## Install
 
-**Rust users** (from [crates.io](https://crates.io/crates/skimmd)):
-
-```sh
-cargo install skimmd
-# faster, if you have cargo-binstall:  cargo binstall -i skimmd
-```
-
-**Everyone else**: grab the binary matching your platform and CPU from the
-[GitHub Releases](https://github.com/cwilper/skimmd/releases) page:
+**Prebuilt binary** (no Rust required). Download the file for your platform and
+CPU from the latest [GitHub Release](https://github.com/cwilper/skimmd/releases);
+`<version>` below is the release version (e.g. `0.1.0`):
 
 | Platform | File |
 |---|---|
@@ -37,19 +31,23 @@ cargo install skimmd
 | Windows ARM64 (aarch64) | `skimmd-<version>-aarch64-pc-windows-msvc.exe` |
 
 Linux builds are statically linked (musl), so they run with no system C runtime.
-Put the binary on your `PATH`, e.g.:
+Download and install one — e.g. Linux x86_64, v0.1.0:
 
 ```sh
+curl -LO https://github.com/cwilper/skimmd/releases/download/v0.1.0/skimmd-0.1.0-x86_64-unknown-linux-musl
 chmod +x skimmd-0.1.0-x86_64-unknown-linux-musl
 sudo mv skimmd-0.1.0-x86_64-unknown-linux-musl /usr/local/bin/skimmd
 ```
 
-**From source** (if you have the Rust toolchain, ≥ 1.85):
+**`cargo install`** (if you have Rust ≥ 1.85):
 
 ```sh
-# from the repo:
-cargo install --path .        # or: cargo build --release  (binary in target/release/)
+cargo install skimmd
+# faster, if you have cargo-binstall:  cargo binstall -i skimmd
 ```
+
+**From source** (clone the repo, then `cargo build --release` — the binary lands
+in `target/release/skimmd`).
 
 ## Usage
 
