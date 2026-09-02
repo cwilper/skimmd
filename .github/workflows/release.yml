@@ -60,12 +60,8 @@ jobs:
       - name: Package
         shell: bash
         run: |
-          # Version: prefer the tag (refs/tags/v0.1.0 -> 0.1.0); fall back to Cargo.toml.
-          ver=""
-          case "$GITHUB_REF" in
-            refs/tags/v*) ver="${GITHUB_REF#refs/tags/v}" ;;
-          esac
-          if [ -z "$ver" ]; then ver="$(cargo pkgid | sed -n 's/.*#//p')"; fi
+          # Version from the tag (refs/tags/v0.1.0 -> 0.1.0); the workflow only fires on v* tags.
+          ver="${GITHUB_REF#refs/tags/v}"
 
           # Windows targets produce .exe; all others are plain ELF/Mach-O.
           ext=""
