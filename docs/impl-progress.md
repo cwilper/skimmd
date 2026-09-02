@@ -124,3 +124,15 @@ Append-only running log. Re-read this + `docs/impl-plan.md` if I get confused.
 ## Done
 - [x] All six phases complete. Crate is locally publishable; `repository` URL is
   the one field to add once a remote exists.
+
+## ponytail-review (final over-engineering pass)
+- One finding: `toc::heading_spans()` was a `pub` lib API serving *only* the
+  invariant tests and re-parsing the whole document. **Fixed:** moved the pure-logic
+  §12.8 invariant tests (`accounting_invariant_holds`, `last_row_end_equals_n`,
+  `preamble_row_consistency` + the edge `corpus()`) into `src/toc.rs`'s private test
+  module, where they call the private `extract_headings` directly; deleted the
+  public `heading_spans`. `tests/invariants.rs` now holds only the binary-level range
+  checks and the §12.9 fuzz. Net: −1 public API fn (−~9 lines); test count unchanged
+  (74). Everything else reviewed (lines/ranges/toc/format/main/lib) is lean — the
+  two-phase range parser and `io_reason` are spec-mandated, not gold-plating.
+- Gate after refactor: 74 tests green, clippy + fmt clean, golden outputs unchanged.

@@ -99,18 +99,6 @@ pub fn build_toc(lm: &LineMap) -> Vec<Row> {
     rows
 }
 
-/// Heading line-spans `(first_line, last_line)` in document order.
-///
-/// A verification helper (e.g. for the §6.2 accounting invariant): the TOC rows
-/// themselves only expose `line` (== `first_line`). Re-parses; not a hot path.
-#[must_use]
-pub fn heading_spans(lm: &LineMap) -> Vec<(usize, usize)> {
-    extract_headings(lm.text(), lm)
-        .iter()
-        .map(|h| (h.first_line, h.last_line))
-        .collect()
-}
-
 /// Walk the offset iterator and collect headings in document order (§5.2).
 fn extract_headings(text: &str, lm: &LineMap) -> Vec<Heading> {
     let mut headings = Vec::new();
@@ -313,5 +301,80 @@ mod tests {
     #[test]
     fn empty_file_has_no_rows() {
         assert!(toc_of("").is_empty());
+    }
+
+    // --- §12.8 structural invariants (private access, no public helper needed) -
+
+    /// Edge-case corpus beyond the golden fixture (CRLF, setext, multi-H1, empty…).
+    fn corpus() -> &'static [&'static str] {
+        &[
+            "",
+            "# H\n",
+            "plain\n",
+            "---\ntitle: x\n---\n\n# Real\n",
+            "Alpha\nBeta\n=====\n",
+            "a\r\nb\r\nc\r\n",
+            "# A\n# B\n",
+            "> ## Q\n- ## L\n",
+            "## x {#id}\nbody\n",
+            "#\n",
+            "no trailing newline",
+            "# T\n\nbody\n",
+        ]
+    }
+
+    /// §12.8 accounting invariant: preamble + each heading's own lines + each
+    /// heading row's body chars must tile the whole file.
+    #[test]
+    fn accounting_invariant_holds() {
+        for (i, text) in corpus().iter().enumerate() {
+            let lm = LineMap::new(text.to_string());
+            let headings = extract_headings(lm.text(), &lm);
+            let rows = build_toc(&lm);
+            let n = lm.n();
+            let p = headings.first().map_or(n, |h| h.first_line - 1);
+            let mut sum = lm.chars(1, p); // 0 when the preamble is suppressed
+            for h in &headings {
+                sum += lm.chars(h.first_line, h.last_line); // heading's own lines
+            }
+            for r in rows.iter().filter(|r| r.level > 0) {
+                sum += r.chars; // each heading row's body
+            }
+            assert_eq!(sum, lm.text().chars().count(), "corpus[{i}]: {text:?}");
+        }
+    }
+
+    #[test]
+    fn last_row_end_equals_n() {
+        for (i, text) in corpus().iter().enumerate() {
+            let lm = LineMap::new(text.to_string());
+            let rows = build_toc(&lm);
+            let n = lm.n();
+            if n == 0 {
+                assert!(rows.is_empty(), "corpus[{i}]");
+            } else {
+                assert_eq!(rows.last().map(|r| r.end), Some(n), "corpus[{i}]: {text:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn preamble_row_consistency() {
+        for text in ["intro line\n# Head\n", "# Head\n", ""] {
+            let lm = LineMap::new(text.to_string());
+            let rows = build_toc(&lm);
+            if lm.n() == 0 {
+                continue;
+            }
+            let first = &rows[0];
+            assert_eq!(first.line, 1);
+            if rows.len() > 1 {
+                assert_eq!(first.level, 0);
+                assert_eq!(first.title, "preamble");
+                assert_eq!(first.end, rows[1].line - 1);
+            } else {
+                assert!(first.level > 0 && first.line == 1, "{text:?}");
+            }
+        }
     }
 }

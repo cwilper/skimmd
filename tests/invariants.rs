@@ -1,101 +1,14 @@
-//! §12.8 accounting/structural invariants and §12.9 no-panic fuzzing.
+//! §12.8(b)/(c) binary-level range checks and §12.9 no-panic fuzzing.
 //!
-//! The accounting invariant (§6.2) is the strong correctness check on the TOC
-//! engine: the preamble region, every heading's own lines, and every heading
-//! row's body chars must partition the whole file.
+//! (The pure-logic §12.8 accounting/structural invariants live in `src/toc.rs`'s
+//! test module, where they can use the private heading extractor directly.)
 
 use skimmd::format::{Format, render};
 use skimmd::lines::{LineMap, load_text};
 use skimmd::ranges;
-use skimmd::toc::{build_toc, heading_spans};
+use skimmd::toc::build_toc;
 
 const FILE: &str = "tests/fixtures/example.md";
-
-/// A spread of in-memory texts covering the edge cases (§10).
-fn corpus() -> Vec<&'static str> {
-    vec![
-        "",                               // empty
-        "# H\n",                          // heading only, no preamble
-        "plain\n",                        // no headings
-        "---\ntitle: x\n---\n\n# Real\n", // setext trap (no phantom H1)
-        "Alpha\nBeta\n=====\n",           // setext multi-line
-        "a\r\nb\r\nc\r\n",                // CRLF
-        "# A\n# B\n",                     // multiple H1
-        "> ## Q\n- ## L\n",               // blockquote / list (not TOC)
-        "## x {#id}\nbody\n",             // attributes stripped
-        "#\n",                            // empty H1
-        "no trailing newline",            // no final \n
-        "# T\n\nbody\n",                  // simple
-    ]
-}
-
-#[test]
-fn accounting_invariant_holds() {
-    for (i, text) in corpus().into_iter().enumerate() {
-        let lm = LineMap::new(text.to_string());
-        let rows = build_toc(&lm);
-        let spans = heading_spans(&lm);
-        let n = lm.n();
-        let total = lm.text().chars().count();
-
-        // preamble end P = (first heading's first_line - 1) if any, else N.
-        let p = spans.first().map_or(n, |(fl, _)| *fl - 1);
-        let mut sum = lm.chars(1, p); // 0 when p == 0 (suppressed preamble)
-        for (fl, ll) in &spans {
-            sum += lm.chars(*fl, *ll); // each heading's own lines
-        }
-        for r in rows.iter().filter(|r| r.level > 0) {
-            sum += r.chars; // each heading row's body
-        }
-        assert_eq!(
-            sum, total,
-            "accounting invariant broken on corpus[{i}] (n={n}): {text:?}"
-        );
-    }
-}
-
-#[test]
-fn last_row_end_equals_n() {
-    for (i, text) in corpus().into_iter().enumerate() {
-        let lm = LineMap::new(text.to_string());
-        let rows = build_toc(&lm);
-        let n = lm.n();
-        if n == 0 {
-            assert!(rows.is_empty(), "corpus[{i}] should have no rows");
-        } else {
-            assert_eq!(
-                rows.last().map(|r| r.end),
-                Some(n),
-                "last row end != N on corpus[{i}]: {text:?}"
-            );
-        }
-    }
-}
-
-#[test]
-fn preamble_row_consistency() {
-    // When the preamble row is present, it starts at 1 with level 0, end == first
-    // heading's line - 1 (or N), and its title is "preamble".
-    for text in ["intro line\n# Head\n", "# Head\n", ""] {
-        let lm = LineMap::new(text.to_string());
-        let rows = build_toc(&lm);
-        let n = lm.n();
-        if n == 0 {
-            continue;
-        }
-        let first = &rows[0];
-        assert_eq!(first.line, 1);
-        if rows.len() > 1 {
-            // preamble present
-            assert_eq!(first.level, 0);
-            assert_eq!(first.title, "preamble");
-            assert_eq!(first.end, rows[1].line - 1);
-        } else {
-            // single row: a heading at line 1 (preamble suppressed)
-            assert!(first.level > 0 && first.line == 1, "{text:?}");
-        }
-    }
-}
 
 /// §12.8(b): for every TOC row of the golden fixture, `skimmd FILE line-end`
 /// succeeds (exit 0) with non-empty output.
@@ -168,17 +81,6 @@ fn fuzz_no_panic() {
             let text = text.strip_prefix('\u{feff}').unwrap_or(&text).to_string();
             let lm = LineMap::new(text);
             let rows = build_toc(&lm);
-            // invariant still holds on fuzzed input
-            let spans = heading_spans(&lm);
-            let p = spans.first().map_or(lm.n(), |(fl, _)| *fl - 1);
-            let mut sum = lm.chars(1, p);
-            for (fl, ll) in &spans {
-                sum += lm.chars(*fl, *ll);
-            }
-            for r in rows.iter().filter(|r| r.level > 0) {
-                sum += r.chars;
-            }
-            assert_eq!(sum, lm.text().chars().count(), "fuzz invariant broken");
             let _ = render(&rows, lm.n(), Format::Md);
             let _ = render(&rows, lm.n(), Format::Tsv);
             let _ = render(&rows, lm.n(), Format::Json);
