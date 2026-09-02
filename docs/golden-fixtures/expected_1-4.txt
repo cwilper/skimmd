@@ -1,4 +1,0 @@
----
-title: Example
-tags: [a, b]
----
