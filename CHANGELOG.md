@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-09-08
+
+### Added
+
+- `-f`/`--filter` TOC output now includes a `matches` column (after `title`):
+  the total occurrences of the candidate substrings in that section (heading +
+  body, summed over all candidates), so hits can be ranked by how meaty a
+  section is on the topic. Unfiltered TOC output is unchanged (5 columns).
+
+### Changed
+
+- The README, skill, and `samples/` now demonstrate the tool end to end on a
+  real 260KB article (Wikipedia's "Rain"): `samples/` holds the article, its
+  TOC, a filtered TOC, and the extracted sections, plus a `regenerate.sh`
+  drift check for the captured outputs.
+
 ## [0.2.1] - 2026-09-08
 
 ### Changed
