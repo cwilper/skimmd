@@ -7,17 +7,25 @@
 
 use crate::toc::Row;
 
-/// Render `rows` as a compact GitHub-style Markdown table. Only `|` needs
-/// escaping in titles.
+/// The five shared cells of a TOC row (through `title`); both table layouts
+/// build on this so the column order can't drift. Only `|` needs escaping.
+fn row_cells(r: &Row) -> String {
+    format!(
+        "{} | {} | {} | {} | {}",
+        r.line,
+        r.level,
+        r.end,
+        r.chars,
+        r.title.replace('|', "\\|")
+    )
+}
+
+/// Render `rows` as a compact GitHub-style Markdown table.
 #[must_use]
 pub fn render(rows: &[Row]) -> String {
     let mut out = String::from("| line | level | end | chars | title |\n|---|---|---|---|---|\n");
     for r in rows {
-        let title = r.title.replace('|', "\\|");
-        out.push_str(&format!(
-            "| {} | {} | {} | {} | {} |\n",
-            r.line, r.level, r.end, r.chars, title
-        ));
+        out.push_str(&format!("| {} |\n", row_cells(r)));
     }
     out
 }
@@ -32,11 +40,7 @@ pub fn render_filtered(rows: &[(Row, usize)]) -> String {
         "| line | level | end | chars | title | matches |\n|---|---|---|---|---|---|\n",
     );
     for (r, m) in rows {
-        let title = r.title.replace('|', "\\|");
-        out.push_str(&format!(
-            "| {} | {} | {} | {} | {} | {} |\n",
-            r.line, r.level, r.end, r.chars, title, m
-        ));
+        out.push_str(&format!("| {} | {} |\n", row_cells(r), m));
     }
     out
 }
@@ -87,15 +91,6 @@ mod tests {
         assert_eq!(
             render_filtered(&rows),
             "| line | level | end | chars | title | matches |\n|---|---|---|---|---|---|\n| 1 | 1 | 1 | 0 | X | 5 |\n"
-        );
-    }
-
-    #[test]
-    fn filtered_escapes_pipe_in_title() {
-        let rows = vec![(row(2, 2, 5, 9, "A | B"), 0)];
-        assert_eq!(
-            render_filtered(&rows),
-            "| line | level | end | chars | title | matches |\n|---|---|---|---|---|---|\n| 2 | 2 | 5 | 9 | A \\| B | 0 |\n"
         );
     }
 

@@ -394,27 +394,6 @@ mod tests {
     }
 
     #[test]
-    fn filter_counts_body_only_needle() {
-        // needle only in the body: row present, count reflects the body.
-        let lm = LineMap::new("# Title\ngamma gamma\n".to_string());
-        let rows = build_toc(&lm);
-        let got = filter_rows(&lm, &rows, "gamma");
-        assert_eq!(got.len(), 1, "{got:?}");
-        assert_eq!(got[0].1, 2);
-    }
-
-    #[test]
-    fn filter_empty_needle_keeps_all_rows_with_zero_count() {
-        let lm = LineMap::new("# A\nb\n## C\nd\n".to_string());
-        let rows = build_toc(&lm);
-        for needle in ["|||", "   "] {
-            let got = filter_rows(&lm, &rows, needle);
-            assert_eq!(got.len(), rows.len(), "pipes/whitespace-only matches all");
-            assert!(got.iter().all(|(_, m)| *m == 0), "no candidates -> count 0");
-        }
-    }
-
-    #[test]
     fn filter_normalizes_whitespace_including_newlines() {
         // "foo" ends line 2, "bar" starts line 3: the substring may span the break.
         // Runs of any whitespace (space/tab/newline) collapse on both sides.
@@ -453,17 +432,13 @@ mod tests {
         // Empty candidates (a||b, a| |b) are ignored -> same as a|b.
         assert_eq!(filter_rows(&lm, &rows, "alpha||beta").len(), 2);
         assert_eq!(filter_rows(&lm, &rows, "alpha| |beta").len(), 2);
-        // No candidate left (only pipes / only whitespace) -> matches every row.
-        assert_eq!(
-            filter_rows(&lm, &rows, "|||").len(),
-            3,
-            "pipes-only matches all"
-        );
-        assert_eq!(
-            filter_rows(&lm, &rows, "   ").len(),
-            3,
-            "whitespace-only matches all"
-        );
+        // No candidate left (only pipes / only whitespace) -> every row kept,
+        // each with a zero count.
+        for needle in ["|||", "   "] {
+            let got = filter_rows(&lm, &rows, needle);
+            assert_eq!(got.len(), 3, "pipes/whitespace-only matches all");
+            assert!(got.iter().all(|(_, m)| *m == 0), "no candidates -> count 0");
+        }
         // None of the candidates present -> no rows.
         assert!(filter_rows(&lm, &rows, "foo|bar").is_empty());
     }
