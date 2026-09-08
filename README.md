@@ -52,10 +52,10 @@ in `target/release/skimmd`).
 ## Usage
 
 ```
-skimmd [OPTIONS] <FILE> [RANGE]...
+skimmd [OPTIONS] [FILE] [RANGE]...
 
 Arguments:
-  <FILE>     Path to a Markdown file, or - to read from stdin (the first positional is always the file)
+  [FILE]     Path to a Markdown file, or - to read from stdin. Omit it (or use -) to read from standard input.
   [RANGE]... Zero or more line ranges; any range switches to range mode
 
 Options:
@@ -136,7 +136,7 @@ is dropped). Piped input works too: use `-` as the file (`cat FILE | skimmd -
 |---|---|
 | 0 | Success. |
 | 1 | The request could not be satisfied: file not found / is a directory / not valid UTF-8, an invalid range, or a non-`EPIPE` stdout write error. |
-| 2 | Usage error (bad flag, missing file, unknown `--format`). |
+| 2 | Usage error (bad flag, unknown `--format`). |
 
 Errors are printed to stderr as `skimmd: <message>`; on any error, stdout is
 empty. A broken pipe (`EPIPE`) is a clean exit 0 with no message.

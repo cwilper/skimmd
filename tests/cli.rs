@@ -201,6 +201,18 @@ fn bom_is_invisible() {
 // --- stdin (-) ---------------------------------------------------------------
 
 #[test]
+fn no_args_is_same_as_dash_stdin() {
+    // No FILE (or `-`) reads the TOC from standard input; the two must match byte-for-byte.
+    let md = "# Hello\nbody\n## Sub\ntext\n";
+    let a = cmd().write_stdin(md).output().unwrap();
+    let b = cmd().arg("-").write_stdin(md).output().unwrap();
+    assert_eq!(a.status.code(), Some(0), "no-args must succeed");
+    assert_eq!(a.stdout, b.stdout, "no-args must behave like '-'");
+    let s = String::from_utf8_lossy(&a.stdout);
+    assert!(s.contains("| 1 | 1 | 4 | 5 | Hello |"), "TOC missing: {s}");
+}
+
+#[test]
 fn stdin_toc() {
     let o = cmd()
         .arg("-")
@@ -246,12 +258,6 @@ fn stdin_not_utf8() {
 }
 
 // --- usage errors (clap, exit 2) ---------------------------------------------
-
-#[test]
-fn missing_file_is_usage_error() {
-    let o = run(&[]);
-    assert_eq!(o.status.code(), Some(2));
-}
 
 #[test]
 fn bad_format_is_usage_error() {

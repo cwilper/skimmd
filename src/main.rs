@@ -1,7 +1,8 @@
 //! `skimmd` — command-line entry point.
 //!
 //! Two modes (spec §2):
-//! * TOC mode — `skimmd [--format md|tsv|json] FILE` prints the structure table.
+//! * TOC mode — `skimmd [--format md|tsv|json] [FILE]` prints the structure table.
+//!   (FILE omitted or `-` reads from standard input.)
 //! * Range mode — `skimmd FILE RANGE...` prints the requested line ranges verbatim.
 //!
 //! Exit codes (spec §9): 0 success; 1 the request could not be satisfied
@@ -24,15 +25,16 @@ use skimmd::toc::build_toc;
     after_help = "RANGE grammar: N-M or N- (N- = through the last line). \
         Ranges are comma- and/or space-separated, e.g. 1-5,9-12 or 1-5 9-12. \
         With no ranges, the TOC is printed. \
-        Use - as FILE to read from standard input."
+        Omit FILE (or use -) to read from standard input. "
 )]
 struct Cli {
     /// TOC output format (ignored in range mode).
     #[arg(short, long, value_enum, default_value_t = Format::Md)]
     format: Format,
 
-    /// Path to a Markdown file, or `-` for stdin. The first positional is always the file.
-    file: String,
+    /// Path to a Markdown file, or `-` for stdin. Omitted (or `-`) reads from stdin.
+    #[arg(required = false)]
+    file: Option<String>,
 
     /// Zero or more line ranges. Any range switches to range mode.
     #[arg(value_name = "RANGE")]
@@ -42,11 +44,10 @@ struct Cli {
 fn main() -> ExitCode {
     let cli = Cli::parse(); // clap prints usage and exits 2 on usage errors.
 
-    // Load the input (BOM strip + UTF-8 validate) — shared by both modes.
-    let (label, res) = if cli.file == "-" {
-        ("<stdin>", load_stdin())
-    } else {
-        (cli.file.as_str(), load_text(&std::path::PathBuf::from(&cli.file)))
+    // Omitted FILE (or "-") reads from standard input.
+    let (label, res) = match &cli.file {
+        Some(f) if f != "-" => (f.as_str(), load_text(std::path::Path::new(f))),
+        _ => ("<stdin>", load_stdin()),
     };
     let text = match res {
         Ok(t) => t,

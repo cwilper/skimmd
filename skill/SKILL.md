@@ -114,7 +114,7 @@ skimmd file.md | rg -i 'installation|setup'
 - `0` — success (also for a broken pipe when piping into `head`).
 - `1` — request could not be satisfied: file missing, is a directory,
   not valid UTF-8, or an invalid range.
-- `2` — usage error (bad flag, missing file).
+- `2` — usage error (bad flag, unknown `--format`).
 
 Errors go to stderr as `skimmd: <message>`; on error, stdout is empty.
 
@@ -129,3 +129,5 @@ Errors go to stderr as `skimmd: <message>`; on error, stdout is empty.
   — they do not become TOC entries. That's usually what you want.
 - **Line numbers are 1-based** over the raw file lines, so ranges you
   hand back to `sed`, `awk`, editors, or humans line up.
+- **`FILE` is optional** — omit it (or pass `-`) to read the Markdown from
+  standard input: `cat doc.md | skimmd` or `skimmd < doc.md`.
