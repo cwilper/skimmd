@@ -1,11 +1,10 @@
-# skimmd - Skim Markdown at agent speed
+# skimmd - read markdown with speed and precision
 
 [![crates.io](https://img.shields.io/crates/v/skimmd.svg)](https://crates.io/crates/skimmd)
 [![docs.rs](https://docs.rs/skimmd/badge.svg)](https://docs.rs/skimmd)
 
-`skimmd` lets an agent (or you) read a single Markdown file without loading the
-whole thing: print its table of contents, then fetch exactly the line ranges you
-care about — verbatim, byte for byte.
+`skimmd` prints a markdown file's table of contents, filters it to the sections you care about, and extracts exactly
+the lines you want — built for agents, useful for anyone.
 
 ## Quick demo
 
