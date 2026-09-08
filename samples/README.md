@@ -15,6 +15,9 @@ wanted with 1/20th of the tokens (`<13k`).
   extracted from the original article (`skimmd 1.full-article.md
   445-472,518-534,589-630`)
 
+Files 2–4 are captured outputs; `sh samples/regenerate.sh` (from the repo
+root) regenerates them and diffs against the committed copies.
+
 ## Attribution & License
 
 The original content is [the Wikipedia article for

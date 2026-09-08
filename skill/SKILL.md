@@ -11,6 +11,7 @@ For Markdown files bigger than you need in full: reading them whole wastes conte
 ```bash
 skimmd FILE                 # TOC of every section
 skimmd FILE -f 'a|b'        # only rows whose title or body matches a|b (OR), with a matches count
+skimmd -                    # or: skimmd < FILE — read from stdin
 ```
 
 Example: a 260KB article on rain, you need the pollution-related parts. Cast a wide net first — matches are case-insensitive substrings, and `|` ORs the terms:

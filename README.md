@@ -178,7 +178,9 @@ $ skimmd samples/1.full-article.md 518-520
 $ skimmd samples/1.full-article.md 589-630
 ### Pollution and composition
 
-The chemical composition of rain is …
+Aside from contamination of rainwater by [sulfuric](…) and [nitric
+oxides](…), which produces acid rain, various pollutants from industry
+and household wastes can end up in rainwater …
 ```
 
 **Range grammar:** `N-M` (both inclusive) or `N-` (through the last line).
