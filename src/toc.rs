@@ -99,6 +99,26 @@ pub fn build_toc(lm: &LineMap) -> Vec<Row> {
     rows
 }
 
+/// Keep rows whose section text contains `needle` (case-insensitive substring).
+/// A row's block is its heading line(s) plus its own body: `line` up to the line
+/// before the next row's heading, or EOF (subsections excluded). Plain
+/// `str::contains` on lowercased text — no regex.
+#[must_use]
+pub fn filter_rows(lm: &LineMap, rows: &[Row], needle: &str) -> Vec<Row> {
+    let needle = needle.to_lowercase();
+    let n = lm.n();
+    rows.iter()
+        .enumerate()
+        .filter_map(|(i, r)| {
+            let block_end = rows.get(i + 1).map_or(n, |next| next.line - 1);
+            lm.span(r.line, block_end)
+                .to_lowercase()
+                .contains(&needle)
+                .then(|| r.clone())
+        })
+        .collect()
+}
+
 /// Walk the offset iterator and collect headings in document order (§5.2).
 fn extract_headings(text: &str, lm: &LineMap) -> Vec<Heading> {
     let mut headings = Vec::new();
@@ -301,6 +321,33 @@ mod tests {
     #[test]
     fn empty_file_has_no_rows() {
         assert!(toc_of("").is_empty());
+    }
+
+    // --- filter_rows (the -F/--filter filter) --------------------------------
+
+    #[test]
+    fn filter_matches_title_and_body_case_insensitively() {
+        let lm = LineMap::new("# Alpha\nalpha body\n## Beta\nonly beta\n".to_string());
+        let rows = build_toc(&lm);
+        // "beta" is in the Beta heading and body; "ALPHA" (case-insens.) in Alpha.
+        assert_eq!(filter_rows(&lm, &rows, "beta")[0].title, "Beta");
+        assert_eq!(filter_rows(&lm, &rows, "ALPHA").len(), 1);
+        assert_eq!(filter_rows(&lm, &rows, "ALPHA")[0].title, "Alpha");
+        // body-only match: "alpha" is in Alpha's body, not just its heading.
+        assert_eq!(filter_rows(&lm, &rows, "body")[0].title, "Alpha");
+        // no match -> empty, no panic.
+        assert!(filter_rows(&lm, &rows, "zzz").is_empty());
+    }
+
+    #[test]
+    fn filter_excludes_subsections() {
+        // "deep" is only in the H3's body; the H2's own body must not match it,
+        // but the H3 row must.
+        let lm = LineMap::new("## Parent\nshallow\n### Child\ndeep text\n".to_string());
+        let rows = build_toc(&lm);
+        let got = filter_rows(&lm, &rows, "deep");
+        assert_eq!(got.len(), 1, "only the leaf section matches: {got:?}");
+        assert_eq!(got[0].title, "Child");
     }
 
     // --- §12.8 structural invariants (private access, no public helper needed) -

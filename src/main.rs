@@ -15,7 +15,7 @@ use clap::Parser;
 use skimmd::format::{Format, render};
 use skimmd::lines::{LineMap, LoadErr, io_reason, load_stdin, load_text};
 use skimmd::ranges;
-use skimmd::toc::build_toc;
+use skimmd::toc::{build_toc, filter_rows};
 
 /// skimmd: TOC and line-range view of a single Markdown file.
 #[derive(Parser)]
@@ -31,6 +31,12 @@ struct Cli {
     /// TOC output format (ignored in range mode).
     #[arg(short, long, value_enum, default_value_t = Format::Md)]
     format: Format,
+
+    /// Filter TOC rows by substring (TOC mode only, ignored in range mode).
+    /// Case-insensitive; keeps a row if KEYWORD occurs in its heading or its
+    /// section body.
+    #[arg(short = 'F', long = "filter", value_name = "KEYWORD")]
+    filter: Option<String>,
 
     /// Path to a Markdown file, or `-` for stdin. Omitted (or `-`) reads from stdin.
     #[arg(required = false)]
@@ -57,15 +63,20 @@ fn main() -> ExitCode {
     let lm = LineMap::new(text);
 
     if cli.ranges.is_empty() {
-        toc_mode(&lm, cli.format)
+        toc_mode(&lm, cli.format, cli.filter.as_deref())
     } else {
         range_mode(&lm, &cli.ranges)
     }
 }
 
-/// TOC mode: compute rows and render in the requested format.
-fn toc_mode(lm: &LineMap, format: Format) -> ExitCode {
+/// TOC mode: compute rows, optionally filter them with `-F`, and render in the
+/// requested format.
+fn toc_mode(lm: &LineMap, format: Format, filter: Option<&str>) -> ExitCode {
     let rows = build_toc(lm);
+    let rows = match filter {
+        Some(kw) => filter_rows(lm, &rows, kw),
+        None => rows,
+    };
     write_stdout(&render(&rows, lm.n(), format))
 }
 

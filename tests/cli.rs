@@ -79,6 +79,61 @@ fn toc_json_golden() {
     assert_eq!(o.stdout, bytes("tests/fixtures/expected_toc.json"));
 }
 
+// --- TOC substring filter (-F / --filter) -----------------------------------
+
+#[test]
+fn filter_matches_title_and_body_case_insensitive() {
+    // "install" is in the Install heading AND its body (`cargo install`).
+    let o = run(&[FILE, "-F", "install"]);
+    assert_eq!(o.status.code(), Some(0));
+    let s = String::from_utf8_lossy(&o.stdout);
+    assert!(s.contains("| 12 | 2 | 19 | 23 | Install |"), "{s}");
+    assert_eq!(s.lines().count(), 3, "header + 1 row, got: {s}");
+}
+
+#[test]
+fn filter_matches_body_only_keyword() {
+    // "cargo" is only in the Install body, not any title -> proves body search.
+    let o = run(&[FILE, "-F", "cargo"]);
+    assert_eq!(o.status.code(), Some(0));
+    let s = String::from_utf8_lossy(&o.stdout);
+    assert!(s.contains("| 12 | 2 | 19 | 23 | Install |"), "{s}");
+    assert_eq!(s.lines().count(), 3, "header + 1 row, got: {s}");
+}
+
+#[test]
+fn filter_can_match_multiple_rows() {
+    // "body" appears in the Usage body and the Setext body -> two rows.
+    let o = run(&[FILE, "-F", "body"]);
+    assert_eq!(o.status.code(), Some(0));
+    let s = String::from_utf8_lossy(&o.stdout);
+    assert!(s.contains("| 20 | 2 | 23 | 17 | Usage \\| Notes |"), "{s}");
+    assert!(s.contains("| 24 | 2 | 27 | 17 | Setext Heading |"), "{s}");
+    assert_eq!(s.lines().count(), 4, "header + 2 rows, got: {s}");
+}
+
+#[test]
+fn filter_composes_with_format_json() {
+    let o = run(&[FILE, "-F", "brew", "--format", "json"]);
+    assert_eq!(o.status.code(), Some(0));
+    let s = String::from_utf8_lossy(&o.stdout);
+    assert!(s.contains("macOS"), "{s}");
+    assert!(
+        !s.contains("Install"),
+        "unmatched sections must be filtered: {s}"
+    );
+}
+
+#[test]
+fn filter_no_match_is_empty_toc_and_exit_zero() {
+    let o = run(&[FILE, "-F", "zzzz-no-such-word"]);
+    assert_eq!(o.status.code(), Some(0), "no match is not an error");
+    assert_eq!(
+        o.stdout, b"| line | level | end | chars | title |\n|---|---|---|---|---|\n",
+        "header only on no match"
+    );
+}
+
 // --- range mode (§11.5) ------------------------------------------------------
 
 #[test]
@@ -227,7 +282,11 @@ fn stdin_toc() {
 
 #[test]
 fn stdin_range_mode() {
-    let o = cmd().args(["-", "2-3"]).write_stdin("l1\nl2\nl3\nl4\n").output().unwrap();
+    let o = cmd()
+        .args(["-", "2-3"])
+        .write_stdin("l1\nl2\nl3\nl4\n")
+        .output()
+        .unwrap();
     assert_eq!(o.status.code(), Some(0));
     assert_eq!(o.stdout, b"l2\nl3\n");
 }
@@ -241,14 +300,22 @@ fn stdin_1_minus_reproduces_input() {
 
 #[test]
 fn stdin_bom_is_invisible() {
-    let o = cmd().arg("-").write_stdin("\u{feff}# Hi\nx\n").output().unwrap();
+    let o = cmd()
+        .arg("-")
+        .write_stdin("\u{feff}# Hi\nx\n")
+        .output()
+        .unwrap();
     let s = String::from_utf8_lossy(&o.stdout);
     assert!(s.contains("| 1 | 1 | 2 | 2 | Hi |"), "{s}");
 }
 
 #[test]
 fn stdin_not_utf8() {
-    let o = cmd().arg("-").write_stdin([0xFF, 0xFE, 0x00]).output().unwrap();
+    let o = cmd()
+        .arg("-")
+        .write_stdin([0xFF, 0xFE, 0x00])
+        .output()
+        .unwrap();
     assert_eq!(o.status.code(), Some(1));
     assert!(o.stdout.is_empty());
     assert_eq!(

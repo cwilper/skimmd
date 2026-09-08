@@ -102,12 +102,18 @@ it.
 **Piped input:** `-` as the file reads stdin — `cat file.md | skimmd -` (TOC)
 or `cat file.md | skimmd - 12-19` (range).
 
-**Find a section by keyword without reading it:**
+**Find a section by keyword without reading it:** `--filter` (`-F`) keeps only
+the rows whose heading **or body** contains a case-insensitive substring:
 
 ```bash
-skimmd file.md | rg -i 'installation|setup'
-# → jump directly to the matching line range
+skimmd file.md -F install
+# → each matching row's line..end is the range to fetch next
 ```
+
+It is a plain substring, not a regex (no `|`/`*`/`?`). For a real regex over
+the TOC, fall back to `skimmd file.md | rg -i 'a|b'`. A keyword that lives only
+in a section's body still matches (the section's text is searched, not just the
+heading). No match prints an empty TOC and exits `0`.
 
 ## Exit codes & errors
 

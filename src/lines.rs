@@ -96,7 +96,9 @@ pub fn load_text(path: &Path) -> Result<String, LoadErr> {
 /// Read all of stdin, strip a leading UTF-8 BOM, and validate UTF-8.
 pub fn load_stdin() -> Result<String, LoadErr> {
     let mut bytes = Vec::new();
-    std::io::stdin().read_to_end(&mut bytes).map_err(LoadErr::Io)?;
+    std::io::stdin()
+        .read_to_end(&mut bytes)
+        .map_err(LoadErr::Io)?;
     decode(&bytes)
 }
 

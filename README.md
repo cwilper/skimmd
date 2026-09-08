@@ -60,6 +60,7 @@ Arguments:
 
 Options:
   -f, --format <FORMAT>  TOC output format: md, tsv, or json (default: md)
+  -F, --filter <KEYWORD> Filter TOC rows: case-insensitive substring match on a section's heading or body (TOC mode only)
   -h, --help             Help
   -V, --version          Version
 ```
@@ -94,6 +95,25 @@ Each row is a section:
 
 `--format tsv` gives the same rows as tab-separated fields (no header);
 `--format json` gives a JSON array of `{line, level, end, chars, title}` objects.
+
+### Filter TOC rows
+
+`--filter` (`-F`) keeps only the sections whose **heading or body text** contains a
+case-insensitive substring. It is how you jump straight to the sections you care
+about instead of scanning the whole TOC. The output is the filtered TOC (same
+columns and formats), so it composes with `--format json`:
+
+```
+$ skimmd docs/example.md -F install
+| line | level | end | chars | title |
+|---|---|---|---|---|
+| 12 | 2 | 19 | 23 | Install |
+```
+
+Because a section's *text* is searched (not just the heading), a keyword that
+appears only in the body still matches. Subsections are matched on their own
+text, so a hit points at the tightest range to fetch. No match prints an empty
+TOC (header only) and exits `0` — "nothing matched" is not an error.
 
 ### Range mode
 
