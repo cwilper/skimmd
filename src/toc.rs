@@ -8,12 +8,11 @@
 //! * `end` stops before the **next heading of equal or shallower level** (subtree).
 
 use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd};
-use serde::Serialize;
 
 use crate::lines::LineMap;
 
-/// One TOC row. Field order is load-bearing (matches every output format).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+/// One TOC row. Field order is load-bearing (matches the Markdown emitter).
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Row {
     pub line: usize,
     pub level: u8,

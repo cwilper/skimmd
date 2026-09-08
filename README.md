@@ -59,7 +59,6 @@ Arguments:
   [RANGE]... Zero or more line ranges; any range switches to range mode
 
 Options:
-  -f, --format <FORMAT>  TOC output format: md, tsv, or json (default: md)
   -F, --filter <KEYWORD> Filter TOC rows: case-insensitive substring match on a section's heading or body (TOC mode only)
   -h, --help             Help
   -V, --version          Version
@@ -93,15 +92,12 @@ Each row is a section:
 - `title` — the heading text with Markdown emphasis/code/links stripped and
   internal whitespace collapsed to single spaces.
 
-`--format tsv` gives the same rows as tab-separated fields (no header);
-`--format json` gives a JSON array of `{line, level, end, chars, title}` objects.
-
 ### Filter TOC rows
 
 `--filter` (`-F`) keeps only the sections whose **heading or body text** contains a
 case-insensitive substring. It is how you jump straight to the sections you care
 about instead of scanning the whole TOC. The output is the filtered TOC (same
-columns and formats), so it composes with `--format json`:
+columns as an unfiltered one):
 
 ```
 $ skimmd docs/example.md -F install
@@ -156,7 +152,7 @@ is dropped). Piped input works too: use `-` as the file (`cat FILE | skimmd -
 |---|---|
 | 0 | Success. |
 | 1 | The request could not be satisfied: file not found / is a directory / not valid UTF-8, an invalid range, or a non-`EPIPE` stdout write error. |
-| 2 | Usage error (bad flag, unknown `--format`). |
+| 2 | Usage error (bad flag). |
 
 Errors are printed to stderr as `skimmd: <message>`; on any error, stdout is
 empty. A broken pipe (`EPIPE`) is a clean exit 0 with no message.

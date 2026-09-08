@@ -120,7 +120,7 @@ heading). No match prints an empty TOC and exits `0`.
 - `0` — success (also for a broken pipe when piping into `head`).
 - `1` — request could not be satisfied: file missing, is a directory,
   not valid UTF-8, or an invalid range.
-- `2` — usage error (bad flag, unknown `--format`).
+- `2` — usage error (bad flag).
 
 Errors go to stderr as `skimmd: <message>`; on error, stdout is empty.
 

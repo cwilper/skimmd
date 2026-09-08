@@ -6,7 +6,7 @@
 //! * [`lines`] — the 1-based physical line model (`starts`, `N`, `line_of`, `span`, `chars`).
 //! * [`ranges`] — range-spec grammar: parse, validate, normalize.
 //! * [`toc`] — heading extraction and TOC row computation.
-//! * [`format`] — md / tsv / json emitters.
+//! * [`format`] — the Markdown TOC emitter.
 
 pub mod format;
 pub mod lines;

@@ -3,7 +3,7 @@
 //! (The pure-logic §12.8 accounting/structural invariants live in `src/toc.rs`'s
 //! test module, where they can use the private heading extractor directly.)
 
-use skimmd::format::{Format, render};
+use skimmd::format::render;
 use skimmd::lines::{LineMap, load_text};
 use skimmd::ranges;
 use skimmd::toc::build_toc;
@@ -81,9 +81,7 @@ fn fuzz_no_panic() {
             let text = text.strip_prefix('\u{feff}').unwrap_or(&text).to_string();
             let lm = LineMap::new(text);
             let rows = build_toc(&lm);
-            let _ = render(&rows, lm.n(), Format::Md);
-            let _ = render(&rows, lm.n(), Format::Tsv);
-            let _ = render(&rows, lm.n(), Format::Json);
+            let _ = render(&rows);
 
             // Fuzz the range parser too: random spec strings, random line counts.
             for _ in 0..10 {

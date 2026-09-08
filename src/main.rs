@@ -1,7 +1,7 @@
 //! `skimmd` — command-line entry point.
 //!
 //! Two modes (spec §2):
-//! * TOC mode — `skimmd [--format md|tsv|json] [FILE]` prints the structure table.
+//! * TOC mode — `skimmd [FILE]` prints the structure table.
 //!   (FILE omitted or `-` reads from standard input.)
 //! * Range mode — `skimmd FILE RANGE...` prints the requested line ranges verbatim.
 //!
@@ -12,7 +12,7 @@ use std::io::{BufWriter, Write};
 use std::process::ExitCode;
 
 use clap::Parser;
-use skimmd::format::{Format, render};
+use skimmd::format::render;
 use skimmd::lines::{LineMap, LoadErr, io_reason, load_stdin, load_text};
 use skimmd::ranges;
 use skimmd::toc::{build_toc, filter_rows};
@@ -28,10 +28,6 @@ use skimmd::toc::{build_toc, filter_rows};
         Omit FILE (or use -) to read from standard input. "
 )]
 struct Cli {
-    /// TOC output format (ignored in range mode).
-    #[arg(short, long, value_enum, default_value_t = Format::Md)]
-    format: Format,
-
     /// Filter TOC rows by substring (TOC mode only, ignored in range mode).
     /// Case-insensitive; keeps a row if KEYWORD occurs in its heading or its
     /// section body.
@@ -63,21 +59,20 @@ fn main() -> ExitCode {
     let lm = LineMap::new(text);
 
     if cli.ranges.is_empty() {
-        toc_mode(&lm, cli.format, cli.filter.as_deref())
+        toc_mode(&lm, cli.filter.as_deref())
     } else {
         range_mode(&lm, &cli.ranges)
     }
 }
 
-/// TOC mode: compute rows, optionally filter them with `-F`, and render in the
-/// requested format.
-fn toc_mode(lm: &LineMap, format: Format, filter: Option<&str>) -> ExitCode {
+/// TOC mode: compute rows, optionally filter them with `-F`, and render.
+fn toc_mode(lm: &LineMap, filter: Option<&str>) -> ExitCode {
     let rows = build_toc(lm);
     let rows = match filter {
         Some(kw) => filter_rows(lm, &rows, kw),
         None => rows,
     };
-    write_stdout(&render(&rows, lm.n(), format))
+    write_stdout(&render(&rows))
 }
 
 /// Range mode: parse/validate/normalize all ranges **before any output**, then

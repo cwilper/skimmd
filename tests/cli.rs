@@ -65,20 +65,6 @@ fn toc_md_golden() {
     assert_eq!(o.stdout, bytes("tests/fixtures/expected_toc.md"));
 }
 
-#[test]
-fn toc_tsv_golden() {
-    let o = run(&[FILE, "--format", "tsv"]);
-    assert_eq!(o.status.code(), Some(0));
-    assert_eq!(o.stdout, bytes("tests/fixtures/expected_toc.tsv"));
-}
-
-#[test]
-fn toc_json_golden() {
-    let o = run(&[FILE, "--format", "json"]);
-    assert_eq!(o.status.code(), Some(0));
-    assert_eq!(o.stdout, bytes("tests/fixtures/expected_toc.json"));
-}
-
 // --- TOC substring filter (-F / --filter) -----------------------------------
 
 #[test]
@@ -113,8 +99,9 @@ fn filter_can_match_multiple_rows() {
 }
 
 #[test]
-fn filter_composes_with_format_json() {
-    let o = run(&[FILE, "-F", "brew", "--format", "json"]);
+fn filter_drops_unmatched_sections() {
+    // "brew" matches only the macOS section; Install must be filtered out.
+    let o = run(&[FILE, "-F", "brew"]);
     assert_eq!(o.status.code(), Some(0));
     let s = String::from_utf8_lossy(&o.stdout);
     assert!(s.contains("macOS"), "{s}");
@@ -325,13 +312,6 @@ fn stdin_not_utf8() {
 }
 
 // --- usage errors (clap, exit 2) ---------------------------------------------
-
-#[test]
-fn bad_format_is_usage_error() {
-    let o = run(&[FILE, "--format", "xml"]);
-    assert_eq!(o.status.code(), Some(2));
-    assert!(o.stdout.is_empty());
-}
 
 #[test]
 fn unknown_flag_is_usage_error() {
