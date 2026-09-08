@@ -10,20 +10,20 @@ For Markdown files bigger than you need in full: reading them whole wastes conte
 
 ```bash
 skimmd FILE                 # TOC of every section
-skimmd FILE -f 'a|b'        # only rows whose title or body matches a|b (OR)
+skimmd FILE -f 'a|b'        # only rows whose title or body matches a|b (OR), with a matches count
 ```
 
 Example: a 260KB article on rain, you need the pollution-related parts. Cast a wide net first — matches are case-insensitive substrings, and `|` ORs the terms:
 
 ```
 $ skimmd rain.md -f "acid|pollut"
-| line | level | end | chars | title |
-|---|---|---|---|---|
-| 128 | 2 | 199 | 3152 | Contents |
-| 445 | 3 | 472 | 5083 | Human influence |
-| 518 | 3 | 534 | 1979 | Acidity |
-| 589 | 3 | 630 | 5255 | Pollution and composition |
-| 1121 | 2 | 2383 | 126347 | References |
+| line | level | end | chars | title | matches |
+|---|---|---|---|---|---|
+| 128 | 2 | 199 | 3152 | Contents | 4 |
+| 445 | 3 | 472 | 5083 | Human influence | 3 |
+| 518 | 3 | 534 | 1979 | Acidity | 21 |
+| 589 | 3 | 630 | 5255 | Pollution and composition | 17 |
+| 1121 | 2 | 2383 | 126347 | References | 9 |
 ```
 
 One row per section, plus a level-0 `preamble` row for anything before the first heading (YAML front matter lives there).
@@ -35,6 +35,9 @@ One row per section, plus a level-0 `preamble` row for anything before the first
 | `end` | last line of the section **subtree** (heading + body + all subsections) |
 | `chars` | size of the section's **own body** only (up to the next heading of any level); 0 = empty |
 | `title` | heading text, markup stripped |
+| `matches` | **only with `-f`**: total occurrences of your candidate substrings in the section (heading + body, summed over candidates) |
+
+Read `matches` alongside `chars` to rank hits: a small section with many matches is dense on-topic; a huge one with a few only brushes the topic. That's how `-f` gets you from a 260KB article to the ~12KB that matters.
 
 ## 2. Fetch just the sections you want
 

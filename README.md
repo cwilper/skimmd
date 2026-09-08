@@ -23,13 +23,13 @@ of your terms:
 
 ```
 $ skimmd samples/1.full-article.md -f "acid|pollut"
-| line | level | end | chars | title |
-|---|---|---|---|---|
-| 128 | 2 | 199 | 3152 | Contents |
-| 445 | 3 | 472 | 5083 | Human influence |
-| 518 | 3 | 534 | 1979 | Acidity |
-| 589 | 3 | 630 | 5255 | Pollution and composition |
-| 1121 | 2 | 2383 | 126347 | References |
+| line | level | end | chars | title | matches |
+|---|---|---|---|---|---|
+| 128 | 2 | 199 | 3152 | Contents | 4 |
+| 445 | 3 | 472 | 5083 | Human influence | 3 |
+| 518 | 3 | 534 | 1979 | Acidity | 21 |
+| 589 | 3 | 630 | 5255 | Pollution and composition | 17 |
+| 1121 | 2 | 2383 | 126347 | References | 9 |
 ```
 
 ### Then, extract just the sections you want
@@ -146,18 +146,20 @@ matched case-insensitively, whitespace-insensitively, and as a **substring** (no
 whole word — so `foo` also matches `food`). Every run of whitespace (spaces, tabs,
 newlines) collapses to a single space on both sides, so a candidate can match across a
 line break. It is how you jump straight to the sections you care about instead of
-scanning the whole TOC. The output is the filtered TOC (same columns as an unfiltered
-one):
+scanning the whole TOC. The output is the filtered TOC plus a `matches` column —
+the total occurrences of your candidate substrings in that section (heading + body,
+summed over all candidates), a ranking signal for which hits are meaty sections and
+which only brush the topic:
 
 ```
 $ skimmd samples/1.full-article.md -f "acid|pollution"
-| line | level | end | chars | title |
-|---|---|---|---|---|
-| 128 | 2 | 199 | 3152 | Contents |
-| 445 | 3 | 472 | 5083 | Human influence |
-| 518 | 3 | 534 | 1979 | Acidity |
-| 589 | 3 | 630 | 5255 | Pollution and composition |
-| 1121 | 2 | 2383 | 126347 | References |
+| line | level | end | chars | title | matches |
+|---|---|---|---|---|---|
+| 128 | 2 | 199 | 3152 | Contents | 4 |
+| 445 | 3 | 472 | 5083 | Human influence | 3 |
+| 518 | 3 | 534 | 1979 | Acidity | 21 |
+| 589 | 3 | 630 | 5255 | Pollution and composition | 14 |
+| 1121 | 2 | 2383 | 126347 | References | 7 |
 ```
 
 Because a section's *text* is searched (not just the heading), a substring that
