@@ -99,25 +99,29 @@ pub fn build_toc(lm: &LineMap) -> Vec<Row> {
 }
 
 /// Keep rows whose section text matches any candidate in a `|`-separated `needle`
-/// (OR semantics). `|` is a literal separator, not regex; each candidate and the
-/// section text are lowercased and whitespace-normalized (every run of whitespace,
-/// incl. newlines, collapses to one space) before a plain `str::contains`. Empty
-/// candidates (e.g. from `a||b`) are ignored; a value with none left matches every
-/// row. A row's block is its heading line(s) plus its own body: `line` up to the
-/// line before the next row's heading, or EOF (subsections excluded).
+/// (OR semantics), and report, per surviving row, `matches` — the total number of
+/// (non-overlapping) occurrences of the candidate substrings in the same
+/// normalized block the match is checked against.
+/// `|` is a literal separator, not regex; each candidate and the section text are
+/// lowercased and whitespace-normalized (every run of whitespace, incl. newlines,
+/// collapses to one space) before matching and counting. Empty candidates (e.g.
+/// from `a||b`) are ignored; a value with none left keeps every row (each with
+/// `matches == 0`). A row's block is its heading line(s) plus its own body: `line`
+/// up to the line before the next row's heading, or EOF (subsections excluded).
 #[must_use]
-pub fn filter_rows(lm: &LineMap, rows: &[Row], needle: &str) -> Vec<Row> {
+pub fn filter_rows(lm: &LineMap, rows: &[Row], needle: &str) -> Vec<(Row, usize)> {
     let needles = split_needles(needle);
-    if needles.is_empty() {
-        return rows.to_vec(); // no candidates: match every row
-    }
     let n = lm.n();
     rows.iter()
         .enumerate()
         .filter_map(|(i, r)| {
             let block_end = rows.get(i + 1).map_or(n, |next| next.line - 1);
             let hay = normalize_ws(&lm.span(r.line, block_end).to_lowercase());
-            needles.iter().any(|nd| hay.contains(nd)).then(|| r.clone())
+            let matches: usize = needles
+                .iter()
+                .map(|nd| hay.matches(nd.as_str()).count())
+                .sum();
+            (matches > 0 || needles.is_empty()).then(|| (r.clone(), matches))
         })
         .collect()
 }
@@ -348,11 +352,11 @@ mod tests {
         let lm = LineMap::new("# Alpha\nalpha body\n## Beta\nonly beta\n".to_string());
         let rows = build_toc(&lm);
         // "beta" is in the Beta heading and body; "ALPHA" (case-insens.) in Alpha.
-        assert_eq!(filter_rows(&lm, &rows, "beta")[0].title, "Beta");
+        assert_eq!(filter_rows(&lm, &rows, "beta")[0].0.title, "Beta");
         assert_eq!(filter_rows(&lm, &rows, "ALPHA").len(), 1);
-        assert_eq!(filter_rows(&lm, &rows, "ALPHA")[0].title, "Alpha");
+        assert_eq!(filter_rows(&lm, &rows, "ALPHA")[0].0.title, "Alpha");
         // body-only match: "alpha" is in Alpha's body, not just its heading.
-        assert_eq!(filter_rows(&lm, &rows, "body")[0].title, "Alpha");
+        assert_eq!(filter_rows(&lm, &rows, "body")[0].0.title, "Alpha");
         // no match -> empty, no panic.
         assert!(filter_rows(&lm, &rows, "zzz").is_empty());
     }
@@ -365,7 +369,49 @@ mod tests {
         let rows = build_toc(&lm);
         let got = filter_rows(&lm, &rows, "deep");
         assert_eq!(got.len(), 1, "only the leaf section matches: {got:?}");
-        assert_eq!(got[0].title, "Child");
+        assert_eq!(got[0].0.title, "Child");
+    }
+
+    #[test]
+    fn filter_counts_all_occurrences_in_block() {
+        // needle is 3× in the body and 0× in the heading -> matches == 3.
+        let lm = LineMap::new("# Top\nx one\nx two\nx three\n".to_string());
+        let rows = build_toc(&lm);
+        let got = filter_rows(&lm, &rows, "x");
+        assert_eq!(got.len(), 1, "{got:?}");
+        assert_eq!(got[0].0.title, "Top");
+        assert_eq!(got[0].1, 3);
+    }
+
+    #[test]
+    fn filter_counts_sum_across_needles() {
+        // "a" ×2 + "b" ×1 in the block -> matches == 3 (summed over needles).
+        let lm = LineMap::new("# Top\na b a\n".to_string());
+        let rows = build_toc(&lm);
+        let got = filter_rows(&lm, &rows, "a|b");
+        assert_eq!(got.len(), 1, "{got:?}");
+        assert_eq!(got[0].1, 3);
+    }
+
+    #[test]
+    fn filter_counts_body_only_needle() {
+        // needle only in the body: row present, count reflects the body.
+        let lm = LineMap::new("# Title\ngamma gamma\n".to_string());
+        let rows = build_toc(&lm);
+        let got = filter_rows(&lm, &rows, "gamma");
+        assert_eq!(got.len(), 1, "{got:?}");
+        assert_eq!(got[0].1, 2);
+    }
+
+    #[test]
+    fn filter_empty_needle_keeps_all_rows_with_zero_count() {
+        let lm = LineMap::new("# A\nb\n## C\nd\n".to_string());
+        let rows = build_toc(&lm);
+        for needle in ["|||", "   "] {
+            let got = filter_rows(&lm, &rows, needle);
+            assert_eq!(got.len(), rows.len(), "pipes/whitespace-only matches all");
+            assert!(got.iter().all(|(_, m)| *m == 0), "no candidates -> count 0");
+        }
     }
 
     #[test]
@@ -397,7 +443,7 @@ mod tests {
         // OR semantics: "alpha" or "gamma" -> Alpha + Gamma, not Beta.
         let got = filter_rows(&lm, &rows, "alpha|gamma");
         assert_eq!(got.len(), 2, "two of three rows: {got:?}");
-        let titles: Vec<&str> = got.iter().map(|r| r.title.as_str()).collect();
+        let titles: Vec<&str> = got.iter().map(|(r, _)| r.title.as_str()).collect();
         assert_eq!(titles, vec!["Alpha", "Gamma"]);
         // Each candidate is case- and whitespace-insensitive; `|` is literal.
         assert_eq!(filter_rows(&lm, &rows, "ALPHA | BETA").len(), 2);

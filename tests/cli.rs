@@ -69,11 +69,15 @@ fn toc_md_golden() {
 
 #[test]
 fn filter_matches_title_and_body_case_insensitive() {
-    // "install" is in the Install heading AND its body (`cargo install`).
+    // "install" is in the Install heading AND its body (`cargo install`) -> 2.
     let o = run(&[FILE, "-f", "install"]);
     assert_eq!(o.status.code(), Some(0));
     let s = String::from_utf8_lossy(&o.stdout);
-    assert!(s.contains("| 12 | 2 | 19 | 23 | Install |"), "{s}");
+    assert!(
+        s.contains("| line | level | end | chars | title | matches |"),
+        "{s}"
+    );
+    assert!(s.contains("| 12 | 2 | 19 | 23 | Install | 2 |"), "{s}");
     assert_eq!(s.lines().count(), 3, "header + 1 row, got: {s}");
 }
 
@@ -83,18 +87,24 @@ fn filter_matches_body_only_substring() {
     let o = run(&[FILE, "-f", "cargo"]);
     assert_eq!(o.status.code(), Some(0));
     let s = String::from_utf8_lossy(&o.stdout);
-    assert!(s.contains("| 12 | 2 | 19 | 23 | Install |"), "{s}");
+    assert!(s.contains("| 12 | 2 | 19 | 23 | Install | 1 |"), "{s}");
     assert_eq!(s.lines().count(), 3, "header + 1 row, got: {s}");
 }
 
 #[test]
 fn filter_can_match_multiple_rows() {
-    // "body" appears in the Usage body and the Setext body -> two rows.
+    // "body" appears in the Usage body and the Setext body -> two rows, one hit each.
     let o = run(&[FILE, "-f", "body"]);
     assert_eq!(o.status.code(), Some(0));
     let s = String::from_utf8_lossy(&o.stdout);
-    assert!(s.contains("| 20 | 2 | 23 | 17 | Usage \\| Notes |"), "{s}");
-    assert!(s.contains("| 24 | 2 | 27 | 17 | Setext Heading |"), "{s}");
+    assert!(
+        s.contains("| 20 | 2 | 23 | 17 | Usage \\| Notes | 1 |"),
+        "{s}"
+    );
+    assert!(
+        s.contains("| 24 | 2 | 27 | 17 | Setext Heading | 1 |"),
+        "{s}"
+    );
     assert_eq!(s.lines().count(), 4, "header + 2 rows, got: {s}");
 }
 
@@ -116,7 +126,7 @@ fn filter_no_match_is_empty_toc_and_exit_zero() {
     let o = run(&[FILE, "-f", "zzzz-no-such-word"]);
     assert_eq!(o.status.code(), Some(0), "no match is not an error");
     assert_eq!(
-        o.stdout, b"| line | level | end | chars | title |\n|---|---|---|---|---|\n",
+        o.stdout, b"| line | level | end | chars | title | matches |\n|---|---|---|---|---|---|\n",
         "header only on no match"
     );
 }

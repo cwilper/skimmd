@@ -12,7 +12,7 @@ use std::io::{BufWriter, Write};
 use std::process::ExitCode;
 
 use clap::Parser;
-use skimmd::format::render;
+use skimmd::format::{render, render_filtered};
 use skimmd::lines::{LineMap, LoadErr, io_reason, load_stdin, load_text};
 use skimmd::ranges;
 use skimmd::toc::{build_toc, filter_rows};
@@ -66,14 +66,15 @@ fn main() -> ExitCode {
     }
 }
 
-/// TOC mode: compute rows, optionally filter them with `-f`, and render.
+/// TOC mode: compute rows, optionally filter them with `-f` (which also adds a
+/// `matches` count column), and render.
 fn toc_mode(lm: &LineMap, filter: Option<&str>) -> ExitCode {
     let rows = build_toc(lm);
-    let rows = match filter {
-        Some(kw) => filter_rows(lm, &rows, kw),
-        None => rows,
+    let out = match filter {
+        Some(kw) => render_filtered(&filter_rows(lm, &rows, kw)),
+        None => render(&rows),
     };
-    write_stdout(&render(&rows))
+    write_stdout(&out)
 }
 
 /// Range mode: parse/validate/normalize all ranges **before any output**, then
