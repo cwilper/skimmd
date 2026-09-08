@@ -135,6 +135,21 @@ fn filter_matches_across_line_break() {
     assert_eq!(s.lines().count(), 3, "header + 1 row, got: {s}");
 }
 
+#[test]
+fn filter_matches_any_of_multiple_needles() {
+    let p = tmp_file(
+        "skimmd_filter_multi.md",
+        b"# Alpha\nalpha body\n## Beta\nonly beta\n## Gamma\ngamma text\n",
+    );
+    let o = run(&[p.to_str().unwrap(), "-f", "alpha|gamma"]);
+    assert_eq!(o.status.code(), Some(0));
+    let s = String::from_utf8_lossy(&o.stdout);
+    assert!(s.contains("Alpha"), "first candidate matched: {s}");
+    assert!(s.contains("Gamma"), "second candidate matched: {s}");
+    assert!(!s.contains("Beta"), "non-matching section excluded: {s}");
+    assert_eq!(s.lines().count(), 4, "header + 2 rows, got: {s}");
+}
+
 // --- range mode (§11.5) ------------------------------------------------------
 
 #[test]

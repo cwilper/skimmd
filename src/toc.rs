@@ -98,21 +98,26 @@ pub fn build_toc(lm: &LineMap) -> Vec<Row> {
     rows
 }
 
-/// Keep rows whose section text matches `needle`, case- and whitespace-insensitively.
-/// A row's block is its heading line(s) plus its own body: `line` up to the line
-/// before the next row's heading, or EOF (subsections excluded). The needle and the
+/// Keep rows whose section text matches any candidate in a `|`-separated `needle`
+/// (OR semantics). `|` is a literal separator, not regex; each candidate and the
 /// section text are lowercased and whitespace-normalized (every run of whitespace,
-/// incl. newlines, collapses to one space) before a plain `str::contains` — no regex.
+/// incl. newlines, collapses to one space) before a plain `str::contains`. Empty
+/// candidates (e.g. from `a||b`) are ignored; a value with none left matches every
+/// row. A row's block is its heading line(s) plus its own body: `line` up to the
+/// line before the next row's heading, or EOF (subsections excluded).
 #[must_use]
 pub fn filter_rows(lm: &LineMap, rows: &[Row], needle: &str) -> Vec<Row> {
-    let needle = normalize_ws(&needle.to_lowercase());
+    let needles = split_needles(needle);
+    if needles.is_empty() {
+        return rows.to_vec(); // no candidates: match every row
+    }
     let n = lm.n();
     rows.iter()
         .enumerate()
         .filter_map(|(i, r)| {
             let block_end = rows.get(i + 1).map_or(n, |next| next.line - 1);
             let hay = normalize_ws(&lm.span(r.line, block_end).to_lowercase());
-            hay.contains(&needle).then(|| r.clone())
+            needles.iter().any(|nd| hay.contains(nd)).then(|| r.clone())
         })
         .collect()
 }
@@ -183,6 +188,20 @@ fn level_to_u8(level: HeadingLevel) -> u8 {
 #[must_use]
 fn normalize_ws(s: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Split a `-f` value on `|` into normalized candidate substrings. `|` is a
+/// literal separator (no regex). Each candidate is lowercased and
+/// whitespace-normalized (see `normalize_ws`); empty ones (e.g. from `a||b`)
+/// are dropped. An all-empty value yields an empty `Vec`; the caller treats
+/// that as "match every row".
+#[must_use]
+fn split_needles(needle: &str) -> Vec<String> {
+    needle
+        .split('|')
+        .map(|p| normalize_ws(&p.to_lowercase()))
+        .filter(|p| !p.is_empty())
+        .collect()
 }
 
 #[cfg(test)]
@@ -367,6 +386,40 @@ mod tests {
             filter_rows(&lm, &rows, "foo baz").is_empty(),
             "no such phrase"
         );
+    }
+
+    #[test]
+    fn filter_matches_any_of_multiple_needles() {
+        let lm = LineMap::new(
+            "# Alpha\nalpha body\n## Beta\nonly beta\n## Gamma\ngamma text\n".to_string(),
+        );
+        let rows = build_toc(&lm);
+        // OR semantics: "alpha" or "gamma" -> Alpha + Gamma, not Beta.
+        let got = filter_rows(&lm, &rows, "alpha|gamma");
+        assert_eq!(got.len(), 2, "two of three rows: {got:?}");
+        let titles: Vec<&str> = got.iter().map(|r| r.title.as_str()).collect();
+        assert_eq!(titles, vec!["Alpha", "Gamma"]);
+        // Each candidate is case- and whitespace-insensitive; `|` is literal.
+        assert_eq!(filter_rows(&lm, &rows, "ALPHA | BETA").len(), 2);
+        // Leading/trailing/consecutive pipes are ignored.
+        assert_eq!(filter_rows(&lm, &rows, "||alpha|beta||").len(), 2);
+        assert_eq!(filter_rows(&lm, &rows, "|alpha|").len(), 1);
+        // Empty candidates (a||b, a| |b) are ignored -> same as a|b.
+        assert_eq!(filter_rows(&lm, &rows, "alpha||beta").len(), 2);
+        assert_eq!(filter_rows(&lm, &rows, "alpha| |beta").len(), 2);
+        // No candidate left (only pipes / only whitespace) -> matches every row.
+        assert_eq!(
+            filter_rows(&lm, &rows, "|||").len(),
+            3,
+            "pipes-only matches all"
+        );
+        assert_eq!(
+            filter_rows(&lm, &rows, "   ").len(),
+            3,
+            "whitespace-only matches all"
+        );
+        // None of the candidates present -> no rows.
+        assert!(filter_rows(&lm, &rows, "foo|bar").is_empty());
     }
 
     // --- §12.8 structural invariants (private access, no public helper needed) -

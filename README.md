@@ -59,7 +59,7 @@ Arguments:
   [RANGE]... Zero or more line ranges; any range switches to range mode
 
 Options:
-  -f, --filter <KEYWORD> Filter TOC rows: case- and whitespace-insensitive substring match on a section's heading or body (TOC mode only)
+  -f, --filter <KEYWORD> Filter TOC rows: `|`-separated candidates, a row matches if any is found in its heading or body (case- and whitespace-insensitive; TOC mode only)
   -h, --help             Help
   -V, --version          Version
 ```
@@ -94,12 +94,15 @@ Each row is a section:
 
 ### Filter TOC rows
 
-`--filter` (`-f`) keeps only the sections whose **heading or body text** contains the
-keyword. Matching is case-insensitive and whitespace-insensitive: every run of
-whitespace (spaces, tabs, newlines) collapses to a single space on both sides, so a
-keyword can match across a line break. It is how you jump straight to the sections
-you care about instead of scanning the whole TOC. The output is the filtered TOC
-(same columns as an unfiltered one):
+`--filter` (`-f`) keeps only the sections whose **heading or body text** matches at
+least one candidate keyword. You can supply several, separated by `|` — a row is kept
+if **any** of them matches (e.g. `-f 'install|build'`). `|` is a literal separator,
+not a regex; leading, trailing, and repeated pipes are ignored. Each candidate is
+matched case-insensitively and whitespace-insensitively: every run of whitespace
+(spaces, tabs, newlines) collapses to a single space on both sides, so a candidate can
+match across a line break. It is how you jump straight to the sections you care about
+instead of scanning the whole TOC. The output is the filtered TOC (same columns as an
+unfiltered one):
 
 ```
 $ skimmd docs/example.md -f install
