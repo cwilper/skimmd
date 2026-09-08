@@ -184,7 +184,7 @@ fn level_to_u8(level: HeadingLevel) -> u8 {
 
 /// Collapse every run of whitespace (spaces, tabs, newlines, `\r`) to a single space
 /// and trim the ends. Used for heading titles (§5.2 step 5) and for the `-f` filter
-/// (normalizing the keyword and section text before matching).
+/// (normalizing the substring and section text before matching).
 #[must_use]
 fn normalize_ws(s: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ")
@@ -370,7 +370,7 @@ mod tests {
 
     #[test]
     fn filter_normalizes_whitespace_including_newlines() {
-        // "foo" ends line 2, "bar" starts line 3: the keyword may span the break.
+        // "foo" ends line 2, "bar" starts line 3: the substring may span the break.
         // Runs of any whitespace (space/tab/newline) collapse on both sides.
         let lm = LineMap::new("## Sec\nends with foo\nbar starts here\n".to_string());
         let rows = build_toc(&lm);
@@ -380,7 +380,7 @@ mod tests {
         assert_eq!(
             filter_rows(&lm, &rows, "foo\nbar").len(),
             1,
-            "newline in keyword"
+            "newline in substring"
         );
         assert!(
             filter_rows(&lm, &rows, "foo baz").is_empty(),

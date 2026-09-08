@@ -59,7 +59,7 @@ Arguments:
   [RANGE]... Zero or more line ranges; any range switches to range mode
 
 Options:
-  -f, --filter <KEYWORD> Filter TOC rows: `|`-separated candidates, a row matches if any is found in its heading or body (case- and whitespace-insensitive; TOC mode only)
+  -f, --filter <SUBSTRING> Filter TOC rows: `|`-separated substrings, a row matches if any occurs in its heading or body (case- and whitespace-insensitive; substring match — `foo` also matches `food`; TOC mode only)
   -h, --help             Help
   -V, --version          Version
 ```
@@ -94,15 +94,16 @@ Each row is a section:
 
 ### Filter TOC rows
 
-`--filter` (`-f`) keeps only the sections whose **heading or body text** matches at
-least one candidate keyword. You can supply several, separated by `|` — a row is kept
+`--filter` (`-f`) keeps only the sections whose **heading or body text** contains at
+least one candidate substring. You can supply several, separated by `|` — a row is kept
 if **any** of them matches (e.g. `-f 'install|build'`). `|` is a literal separator,
 not a regex; leading, trailing, and repeated pipes are ignored. Each candidate is
-matched case-insensitively and whitespace-insensitively: every run of whitespace
-(spaces, tabs, newlines) collapses to a single space on both sides, so a candidate can
-match across a line break. It is how you jump straight to the sections you care about
-instead of scanning the whole TOC. The output is the filtered TOC (same columns as an
-unfiltered one):
+matched case-insensitively, whitespace-insensitively, and as a **substring** (not a
+whole word — so `foo` also matches `food`). Every run of whitespace (spaces, tabs,
+newlines) collapses to a single space on both sides, so a candidate can match across a
+line break. It is how you jump straight to the sections you care about instead of
+scanning the whole TOC. The output is the filtered TOC (same columns as an unfiltered
+one):
 
 ```
 $ skimmd docs/example.md -f install
@@ -111,7 +112,7 @@ $ skimmd docs/example.md -f install
 | 12 | 2 | 19 | 23 | Install |
 ```
 
-Because a section's *text* is searched (not just the heading), a keyword that
+Because a section's *text* is searched (not just the heading), a substring that
 appears only in the body still matches. Subsections are matched on their own
 text, so a hit points at the tightest range to fetch. No match prints an empty
 TOC (header only) and exits `0` — "nothing matched" is not an error.

@@ -10,7 +10,7 @@ Navigate one Markdown file without loading it all: TOC first, then fetch only th
 
 ```bash
 skimmd FILE               # or: skimmd -  /  skimmd < FILE  (stdin)
-skimmd FILE -f 'A|B'      # keep rows matching any of the |-separated keywords
+skimmd FILE -f 'A|B'      # keep rows matching any of the |-separated substrings
 ```
 
 One row per section, plus a level-0 `preamble` row for anything before the first heading (YAML front matter lives there):
@@ -39,7 +39,7 @@ Range to fetch from a row:
 
 Use `chars` to size fetches: a large `chars` means narrow further instead of fetching it whole.
 
-`-f KEYWORD` takes `|`-separated candidates; a row is kept if **any** matches (OR). `|` is a literal separator (not a regex); leading/trailing/repeated pipes are ignored. Quote the value in the shell (`-f 'a|b'`) — a bare `|` is a shell pipe. Each candidate is a case- and whitespace-insensitive plain substring (runs of whitespace, incl. newlines, collapse to one space), matched against each section's heading and body; TOC mode only. Prefer it over scanning a long TOC. No match → header-only table, exit 0.
+`-f SUBSTRING` takes `|`-separated candidates; a row is kept if **any** matches (OR). `|` is a literal separator (not a regex); leading/trailing/repeated pipes are ignored. Quote the value in the shell (`-f 'a|b'`) — a bare `|` is a shell pipe. Each candidate is a case- and whitespace-insensitive **substring** match (not a whole word — `foo` also matches `food`; runs of whitespace, incl. newlines, collapse to one space), matched against each section's heading and body; TOC mode only. Prefer it over scanning a long TOC. No match → header-only table, exit 0.
 
 ## 2. Fetch
 

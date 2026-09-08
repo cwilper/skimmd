@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `--filter` help placeholder renamed from `<KEYWORD>` to `<SUBSTRING>`; the README,
+  skill, and `--help` now consistently say "substring" (not "keyword") and note that
+  matching is a **substring** (not whole-word) match, so a candidate like `foo` also
+  matches `food`.
+
 ## [0.2.0] - 2026-09-08
 
 ### Added

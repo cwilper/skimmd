@@ -29,9 +29,10 @@ use skimmd::toc::{build_toc, filter_rows};
 )]
 struct Cli {
     /// Filter TOC rows by substring (TOC mode only, ignored in range mode).
-    /// Case-insensitive; keeps a row if KEYWORD occurs in its heading or its
-    /// section body.
-    #[arg(short = 'f', long = "filter", value_name = "KEYWORD")]
+    /// |-separated substrings; keep a row if any occurs in its heading or section
+    /// body. Case- and whitespace-insensitive, and substring (not whole-word)
+    /// matching, so "foo" also matches "food".
+    #[arg(short = 'f', long = "filter", value_name = "SUBSTRING")]
     filter: Option<String>,
 
     /// Path to a Markdown file, or `-` for stdin. Omitted (or `-`) reads from stdin.
