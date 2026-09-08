@@ -4,50 +4,50 @@ description: "Use before reading any local Markdown file (.md, .markdown) from d
 ---
 # skimmd
 
-Navigate one Markdown file without loading it all: TOC first, then fetch only the lines you need. Assume it is on `PATH`; if the command is missing, say so — do not install it.
+For Markdown files bigger than you need in full: reading them whole wastes context and tokens, and `grep`/`rg` are too blunt to pull sections at the right granularity. So: TOC first (optionally filtered), then fetch only the lines you need. Assume it is on `PATH`; if the command is missing, say so — do not install it.
 
-## 1. TOC
+## 1. Find the sections you need
 
 ```bash
-skimmd FILE               # or: skimmd -  /  skimmd < FILE  (stdin)
-skimmd FILE -f 'A|B'      # keep rows matching any of the |-separated substrings
+skimmd FILE                 # TOC of every section
+skimmd FILE -f 'a|b'        # only rows whose title or body matches a|b (OR)
 ```
 
-One row per section, plus a level-0 `preamble` row for anything before the first heading (YAML front matter lives there):
+Example: a 260KB article on rain, you need the pollution-related parts. Cast a wide net first — matches are case-insensitive substrings, and `|` ORs the terms:
 
 ```
+$ skimmd rain.md -f "acid|pollut"
 | line | level | end | chars | title |
 |---|---|---|---|---|
-| 1   | 0 | 7   | 74   | preamble |
-| 8   | 1 | 30  | 17   | Project |
-| 12  | 2 | 19  | 23   | Install |
-| 16  | 3 | 19  | 14   | macOS |
-| 20  | 2 | 23  | 17   | Usage Notes |
+| 128 | 2 | 199 | 3152 | Contents |
+| 445 | 3 | 472 | 5083 | Human influence |
+| 518 | 3 | 534 | 1979 | Acidity |
+| 589 | 3 | 630 | 5255 | Pollution and composition |
+| 1121 | 2 | 2383 | 126347 | References |
 ```
+
+One row per section, plus a level-0 `preamble` row for anything before the first heading (YAML front matter lives there).
 
 | column | meaning |
 |---|---|
-| `line` | line the heading is on (1-based; matches `grep -n` / `sed -n`) |
+| `line` | heading line (1-based; matches `grep -n` / `sed -n`) |
 | `level` | heading depth 1–6; preamble = 0 |
-| `end` | last line of the section **subtree** (heading + body + all deeper subsections) |
+| `end` | last line of the section **subtree** (heading + body + all subsections) |
 | `chars` | size of the section's **own body** only (up to the next heading of any level); 0 = empty |
 | `title` | heading text, markup stripped |
 
-Range to fetch from a row:
-- Section **with** its subsections → `line-end` (Install + macOS: `12-19`).
-- Section's **own text only** → `line` to next row's `line` − 1 (Install alone: `12-15`).
+## 2. Fetch just the sections you want
 
-Use `chars` to size fetches: a large `chars` means narrow further instead of fetching it whole.
-
-`-f SUBSTRING` takes `|`-separated candidates; a row is kept if **any** matches (OR). `|` is a literal separator (not a regex); leading/trailing/repeated pipes are ignored. Quote the value in the shell (`-f 'a|b'`) — a bare `|` is a shell pipe. Each candidate is a case- and whitespace-insensitive **substring** match (not a whole word — `foo` also matches `food`; runs of whitespace, incl. newlines, collapse to one space), matched against each section's heading and body; TOC mode only. Prefer it over scanning a long TOC. No match → header-only table, exit 0.
-
-## 2. Fetch
+The _Contents_ and _References_ rows above are irrelevant — fetch only what matters, in a single command:
 
 ```bash
-skimmd FILE 12-15 20-23   # verbatim lines; N-M inclusive, N- = to EOF; comma or space-separated
+skimmd rain.md 445-472,518-534,589-630   # ~12KB out of 260KB, ~1/20th
 ```
 
-Any range switches to range mode. Overlaps merge; output is ascending. `1-` is the whole file — only if you truly need all of it.
+- Range `N-M` is verbatim lines, inclusive; comma- or space-separated; `N-` runs to EOF.
+- Section **with** subsections → `line`–`end`. Section's **own text only** → `line` to the next row's `line` − 1.
+- Use `chars` to size fetches: a large one means fetch a subrange instead of the section whole.
+- `1-` is the whole file — only if you truly need all of it.
 
 ## Error codes
 
