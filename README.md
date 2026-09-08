@@ -59,7 +59,7 @@ Arguments:
   [RANGE]... Zero or more line ranges; any range switches to range mode
 
 Options:
-  -F, --filter <KEYWORD> Filter TOC rows: case-insensitive substring match on a section's heading or body (TOC mode only)
+  -f, --filter <KEYWORD> Filter TOC rows: case-insensitive substring match on a section's heading or body (TOC mode only)
   -h, --help             Help
   -V, --version          Version
 ```
@@ -94,13 +94,13 @@ Each row is a section:
 
 ### Filter TOC rows
 
-`--filter` (`-F`) keeps only the sections whose **heading or body text** contains a
+`--filter` (`-f`) keeps only the sections whose **heading or body text** contains a
 case-insensitive substring. It is how you jump straight to the sections you care
 about instead of scanning the whole TOC. The output is the filtered TOC (same
 columns as an unfiltered one):
 
 ```
-$ skimmd docs/example.md -F install
+$ skimmd docs/example.md -f install
 | line | level | end | chars | title |
 |---|---|---|---|---|
 | 12 | 2 | 19 | 23 | Install |

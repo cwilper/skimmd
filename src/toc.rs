@@ -322,7 +322,7 @@ mod tests {
         assert!(toc_of("").is_empty());
     }
 
-    // --- filter_rows (the -F/--filter filter) --------------------------------
+    // --- filter_rows (the -f/--filter filter) --------------------------------
 
     #[test]
     fn filter_matches_title_and_body_case_insensitively() {

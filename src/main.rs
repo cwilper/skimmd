@@ -31,7 +31,7 @@ struct Cli {
     /// Filter TOC rows by substring (TOC mode only, ignored in range mode).
     /// Case-insensitive; keeps a row if KEYWORD occurs in its heading or its
     /// section body.
-    #[arg(short = 'F', long = "filter", value_name = "KEYWORD")]
+    #[arg(short = 'f', long = "filter", value_name = "KEYWORD")]
     filter: Option<String>,
 
     /// Path to a Markdown file, or `-` for stdin. Omitted (or `-`) reads from stdin.
@@ -65,7 +65,7 @@ fn main() -> ExitCode {
     }
 }
 
-/// TOC mode: compute rows, optionally filter them with `-F`, and render.
+/// TOC mode: compute rows, optionally filter them with `-f`, and render.
 fn toc_mode(lm: &LineMap, filter: Option<&str>) -> ExitCode {
     let rows = build_toc(lm);
     let rows = match filter {

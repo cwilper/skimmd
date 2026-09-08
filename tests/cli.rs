@@ -65,12 +65,12 @@ fn toc_md_golden() {
     assert_eq!(o.stdout, bytes("tests/fixtures/expected_toc.md"));
 }
 
-// --- TOC substring filter (-F / --filter) -----------------------------------
+// --- TOC substring filter (-f / --filter) -----------------------------------
 
 #[test]
 fn filter_matches_title_and_body_case_insensitive() {
     // "install" is in the Install heading AND its body (`cargo install`).
-    let o = run(&[FILE, "-F", "install"]);
+    let o = run(&[FILE, "-f", "install"]);
     assert_eq!(o.status.code(), Some(0));
     let s = String::from_utf8_lossy(&o.stdout);
     assert!(s.contains("| 12 | 2 | 19 | 23 | Install |"), "{s}");
@@ -80,7 +80,7 @@ fn filter_matches_title_and_body_case_insensitive() {
 #[test]
 fn filter_matches_body_only_keyword() {
     // "cargo" is only in the Install body, not any title -> proves body search.
-    let o = run(&[FILE, "-F", "cargo"]);
+    let o = run(&[FILE, "-f", "cargo"]);
     assert_eq!(o.status.code(), Some(0));
     let s = String::from_utf8_lossy(&o.stdout);
     assert!(s.contains("| 12 | 2 | 19 | 23 | Install |"), "{s}");
@@ -90,7 +90,7 @@ fn filter_matches_body_only_keyword() {
 #[test]
 fn filter_can_match_multiple_rows() {
     // "body" appears in the Usage body and the Setext body -> two rows.
-    let o = run(&[FILE, "-F", "body"]);
+    let o = run(&[FILE, "-f", "body"]);
     assert_eq!(o.status.code(), Some(0));
     let s = String::from_utf8_lossy(&o.stdout);
     assert!(s.contains("| 20 | 2 | 23 | 17 | Usage \\| Notes |"), "{s}");
@@ -101,7 +101,7 @@ fn filter_can_match_multiple_rows() {
 #[test]
 fn filter_drops_unmatched_sections() {
     // "brew" matches only the macOS section; Install must be filtered out.
-    let o = run(&[FILE, "-F", "brew"]);
+    let o = run(&[FILE, "-f", "brew"]);
     assert_eq!(o.status.code(), Some(0));
     let s = String::from_utf8_lossy(&o.stdout);
     assert!(s.contains("macOS"), "{s}");
@@ -113,7 +113,7 @@ fn filter_drops_unmatched_sections() {
 
 #[test]
 fn filter_no_match_is_empty_toc_and_exit_zero() {
-    let o = run(&[FILE, "-F", "zzzz-no-such-word"]);
+    let o = run(&[FILE, "-f", "zzzz-no-such-word"]);
     assert_eq!(o.status.code(), Some(0), "no match is not an error");
     assert_eq!(
         o.stdout, b"| line | level | end | chars | title |\n|---|---|---|---|---|\n",

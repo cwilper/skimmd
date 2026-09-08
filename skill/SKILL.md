@@ -102,11 +102,11 @@ it.
 **Piped input:** `-` as the file reads stdin — `cat file.md | skimmd -` (TOC)
 or `cat file.md | skimmd - 12-19` (range).
 
-**Find a section by keyword without reading it:** `--filter` (`-F`) keeps only
+**Find a section by keyword without reading it:** `--filter` (`-f`) keeps only
 the rows whose heading **or body** contains a case-insensitive substring:
 
 ```bash
-skimmd file.md -F install
+skimmd file.md -f install
 # → each matching row's line..end is the range to fetch next
 ```
 
