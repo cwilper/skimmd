@@ -98,22 +98,21 @@ pub fn build_toc(lm: &LineMap) -> Vec<Row> {
     rows
 }
 
-/// Keep rows whose section text contains `needle` (case-insensitive substring).
+/// Keep rows whose section text matches `needle`, case- and whitespace-insensitively.
 /// A row's block is its heading line(s) plus its own body: `line` up to the line
-/// before the next row's heading, or EOF (subsections excluded). Plain
-/// `str::contains` on lowercased text — no regex.
+/// before the next row's heading, or EOF (subsections excluded). The needle and the
+/// section text are lowercased and whitespace-normalized (every run of whitespace,
+/// incl. newlines, collapses to one space) before a plain `str::contains` — no regex.
 #[must_use]
 pub fn filter_rows(lm: &LineMap, rows: &[Row], needle: &str) -> Vec<Row> {
-    let needle = needle.to_lowercase();
+    let needle = normalize_ws(&needle.to_lowercase());
     let n = lm.n();
     rows.iter()
         .enumerate()
         .filter_map(|(i, r)| {
             let block_end = rows.get(i + 1).map_or(n, |next| next.line - 1);
-            lm.span(r.line, block_end)
-                .to_lowercase()
-                .contains(&needle)
-                .then(|| r.clone())
+            let hay = normalize_ws(&lm.span(r.line, block_end).to_lowercase());
+            hay.contains(&needle).then(|| r.clone())
         })
         .collect()
 }
@@ -137,7 +136,7 @@ fn extract_headings(text: &str, lm: &LineMap) -> Vec<Heading> {
                         first_line: first,
                         last_line: last,
                         level,
-                        title: normalize_title(&buf),
+                        title: normalize_ws(&buf),
                     });
                 }
             }
@@ -178,10 +177,11 @@ fn level_to_u8(level: HeadingLevel) -> u8 {
     }
 }
 
-/// Trim and collapse every internal whitespace run (incl. `\r`) to a single space.
-/// Titles therefore never contain newlines or tabs (§5.2 step 5).
+/// Collapse every run of whitespace (spaces, tabs, newlines, `\r`) to a single space
+/// and trim the ends. Used for heading titles (§5.2 step 5) and for the `-f` filter
+/// (normalizing the keyword and section text before matching).
 #[must_use]
-fn normalize_title(s: &str) -> String {
+fn normalize_ws(s: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
@@ -347,6 +347,26 @@ mod tests {
         let got = filter_rows(&lm, &rows, "deep");
         assert_eq!(got.len(), 1, "only the leaf section matches: {got:?}");
         assert_eq!(got[0].title, "Child");
+    }
+
+    #[test]
+    fn filter_normalizes_whitespace_including_newlines() {
+        // "foo" ends line 2, "bar" starts line 3: the keyword may span the break.
+        // Runs of any whitespace (space/tab/newline) collapse on both sides.
+        let lm = LineMap::new("## Sec\nends with foo\nbar starts here\n".to_string());
+        let rows = build_toc(&lm);
+        assert_eq!(filter_rows(&lm, &rows, "foo bar").len(), 1, "single space");
+        assert_eq!(filter_rows(&lm, &rows, "foo  bar").len(), 1, "double space");
+        assert_eq!(filter_rows(&lm, &rows, "foo\tbar").len(), 1, "tab");
+        assert_eq!(
+            filter_rows(&lm, &rows, "foo\nbar").len(),
+            1,
+            "newline in keyword"
+        );
+        assert!(
+            filter_rows(&lm, &rows, "foo baz").is_empty(),
+            "no such phrase"
+        );
     }
 
     // --- §12.8 structural invariants (private access, no public helper needed) -

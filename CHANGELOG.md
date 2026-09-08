@@ -13,9 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Read from standard input: `skimmd -` or `skimmd` (with `FILE` omitted) reads the
   file from stdin in both TOC and range modes.
-- `-f, --filter <KEYWORD>` — filter TOC rows by a case-insensitive substring match
-  on a section's heading or body (TOC mode only). No match prints an empty TOC and
-  exits `0`.
+- `-f, --filter <KEYWORD>` — filter TOC rows by a case- and whitespace-insensitive
+  substring match on a section's heading or body (runs of whitespace, incl. newlines,
+  collapse to one space; TOC mode only). No match prints an empty TOC and exits `0`.
 
 ### Changed
 

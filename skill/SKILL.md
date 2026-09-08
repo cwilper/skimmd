@@ -39,7 +39,7 @@ Range to fetch from a row:
 
 Use `chars` to size fetches: a large `chars` means narrow further instead of fetching it whole.
 
-`-f KEYWORD` is a case-insensitive plain substring, matched against each section's heading and body; TOC mode only. Prefer it over scanning a long TOC. No match → header-only table, exit 0.
+`-f KEYWORD` is a case- and whitespace-insensitive plain substring (runs of whitespace, incl. newlines, collapse to one space), matched against each section's heading and body; TOC mode only. Prefer it over scanning a long TOC. No match → header-only table, exit 0.
 
 ## 2. Fetch
 

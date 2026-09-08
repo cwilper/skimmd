@@ -121,6 +121,20 @@ fn filter_no_match_is_empty_toc_and_exit_zero() {
     );
 }
 
+#[test]
+fn filter_matches_across_line_break() {
+    // "foo" ends one line, "bar" starts the next: the keyword spans the break.
+    let p = tmp_file(
+        "skimmd_filter_ws.md",
+        b"## Sec\nends with foo\nbar starts here\n",
+    );
+    let o = run(&[p.to_str().unwrap(), "-f", "foo bar"]);
+    assert_eq!(o.status.code(), Some(0));
+    let s = String::from_utf8_lossy(&o.stdout);
+    assert!(s.contains("Sec"), "cross-line keyword must match: {s}");
+    assert_eq!(s.lines().count(), 3, "header + 1 row, got: {s}");
+}
+
 // --- range mode (§11.5) ------------------------------------------------------
 
 #[test]
