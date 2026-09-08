@@ -3,46 +3,61 @@
 [![crates.io](https://img.shields.io/crates/v/skimmd.svg)](https://crates.io/crates/skimmd)
 [![docs.rs](https://docs.rs/skimmd/badge.svg)](https://docs.rs/skimmd)
 
-`skimmd` prints a markdown file's table of contents, filters it to the sections you care about, and extracts exactly
-the lines you want — built for agents, useful for anyone.
+`skimmd` prints a markdown file's table of contents, optionally filtered to the sections you care about,
+and extracts exactly the lines you want — built for agents, useful for anyone.
 
 ## Quick demo
 
-Say you have a doc and want the **Install** section. See its shape:
+Say you're researching pollution and its effects on rain. You've
+downloaded [Wikipedia's article on Rain](https://en.wikipedia.org/wiki/Rain)
+and converted it to markdown — 260KB. Now you need just the parts about
+your topics. Reading the whole thing wastes context and tokens, and
+`grep`/`rg` are too blunt to pull out sections at the right granularity.
+
+### First, find candidate sections
+
+List the article's sections, filtered to the terms you care about.
+Matches are case-insensitive substrings, and `|` ORs multiple terms, so
+cast a wide net first — any section whose title or content contains one
+of your terms:
 
 ```
-$ skimmd samples/sample.md
+$ skimmd samples/1.full-article.md -f "acid|pollut"
 | line | level | end | chars | title |
 |---|---|---|---|---|
-| 1 | 0 | 6 | 101 | preamble |
-| 7 | 1 | 22 | 60 | Getting started |
-| 11 | 2 | 14 | 66 | Install |
-| 15 | 2 | 20 | 74 | Example |
-| 21 | 2 | 22 | 51 | Next steps |
+| 128 | 2 | 199 | 3152 | Contents |
+| 445 | 3 | 472 | 5083 | Human influence |
+| 518 | 3 | 534 | 1979 | Acidity |
+| 589 | 3 | 630 | 5255 | Pollution and composition |
+| 1121 | 2 | 2383 | 126347 | References |
 ```
 
-Or filter to just the sections you care about — a few `|`-separated substrings,
-quoted so the shell passes them through:
+### Then, extract just the sections you want
+
+The _Contents_ and _References_ sections are irrelevant to your question,
+so you extract only the three you need — using the `line`/`end` columns
+as ranges, in a single command:
 
 ```
-$ skimmd samples/sample.md -f "install|example"
-| line | level | end | chars | title |
-|---|---|---|---|---|
-| 11 | 2 | 14 | 66 | Install |
-| 15 | 2 | 20 | 74 | Example |
+$ skimmd samples/1.full-article.md 445-472,518-534,589-630
+### Human influence
+
+The fine particulate matter produced by car exhaust and other human sources of
+pollution forms cloud condensation nuclei …
+
+### Acidity
+
+…
+
+### Pollution and composition
+
+…
 ```
 
-Then fetch a section — exactly those lines, byte for byte:
+That's ~12k characters out of 260KB — about 1/20th the size.
 
-```
-$ skimmd samples/sample.md 11-13
-## Install
-
-Run `cargo install skimmd`, or grab a binary from the releases.
-```
-
-See the shape, filter to what you need, fetch those lines. The full CLI is in
-[Usage](#usage).
+The full walkthrough is in [samples/](samples/README.md); the full CLI
+is in [Usage](#usage).
 
 ## Install
 
@@ -96,14 +111,17 @@ Options:
 ### TOC mode
 
 ```
-$ skimmd samples/sample.md
+$ skimmd samples/1.full-article.md
 | line | level | end | chars | title |
 |---|---|---|---|---|
-| 1 | 0 | 6 | 101 | preamble |
-| 7 | 1 | 22 | 60 | Getting started |
-| 11 | 2 | 14 | 66 | Install |
-| 15 | 2 | 20 | 74 | Example |
-| 21 | 2 | 22 | 51 | Next steps |
+| 1 | 0 | 40 | 1311 | preamble |
+| 41 | 1 | 2913 | 6797 | Rain |
+| 128 | 2 | 199 | 3152 | Contents |
+| 200 | 2 | 332 | 1 | Formation |
+| 203 | 3 | 239 | 4489 | Water-saturated air |
+| … |
+| 2384 | 2 | 2913 | 1384 | External links |
+| 2413 | 4 | 2913 | 22084 | Languages |
 ```
 
 Each row is a section:
@@ -132,10 +150,14 @@ scanning the whole TOC. The output is the filtered TOC (same columns as an unfil
 one):
 
 ```
-$ skimmd samples/sample.md -f install
+$ skimmd samples/1.full-article.md -f "acid|pollution"
 | line | level | end | chars | title |
 |---|---|---|---|---|
-| 11 | 2 | 14 | 66 | Install |
+| 128 | 2 | 199 | 3152 | Contents |
+| 445 | 3 | 472 | 5083 | Human influence |
+| 518 | 3 | 534 | 1979 | Acidity |
+| 589 | 3 | 630 | 5255 | Pollution and composition |
+| 1121 | 2 | 2383 | 126347 | References |
 ```
 
 Because a section's *text* is searched (not just the heading), a substring that
@@ -146,21 +168,15 @@ TOC (header only) and exits `0` — "nothing matched" is not an error.
 ### Range mode
 
 ```
-$ skimmd samples/sample.md 1-3
----
-title: skimmd user guide
----
+$ skimmd samples/1.full-article.md 518-520
+### Acidity
 
-$ skimmd samples/sample.md 15-19
-## Example
+[![](https://thumb.wikimedia.org/…)](https://en.wikipedia.org/wiki/File:Origins_of_acid_rain.svg.png)
 
-See the shape of any file with a single command:
+$ skimmd samples/1.full-article.md 589-630
+### Pollution and composition
 
-    $ skimmd notes.md
-
-$ skimmd samples/sample.md 21-22
-## Next steps
-Read the usage section for the full CLI reference.
+The chemical composition of rain is …
 ```
 
 **Range grammar:** `N-M` (both inclusive) or `N-` (through the last line).
