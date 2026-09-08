@@ -6,6 +6,7 @@
 //! * A lone `\r` is an ordinary character (classic-Mac line endings are unsupported).
 //! * In CRLF files the `\r` stays on its line, is output verbatim, and counts in `chars`.
 
+use std::io::Read;
 use std::path::Path;
 
 /// A line map over an in-memory, BOM-stripped, valid-UTF-8 `text`.
@@ -89,10 +90,21 @@ pub enum LoadErr {
 /// Returns the decoded, BOM-stripped text (the spec's `text`). The BOM is never
 /// counted, output, or passed onward. No lossy decoding.
 pub fn load_text(path: &Path) -> Result<String, LoadErr> {
-    let bytes = std::fs::read(path).map_err(LoadErr::Io)?;
+    decode(&std::fs::read(path).map_err(LoadErr::Io)?)
+}
+
+/// Read all of stdin, strip a leading UTF-8 BOM, and validate UTF-8.
+pub fn load_stdin() -> Result<String, LoadErr> {
+    let mut bytes = Vec::new();
+    std::io::stdin().read_to_end(&mut bytes).map_err(LoadErr::Io)?;
+    decode(&bytes)
+}
+
+/// Strip a leading UTF-8 BOM and decode as strict UTF-8.
+fn decode(bytes: &[u8]) -> Result<String, LoadErr> {
     let bytes = bytes
         .strip_prefix([0xEF, 0xBB, 0xBF].as_slice())
-        .unwrap_or(bytes.as_slice());
+        .unwrap_or(bytes);
     String::from_utf8(bytes.to_vec()).map_err(|_| LoadErr::NotUtf8)
 }
 

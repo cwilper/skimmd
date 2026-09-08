@@ -198,6 +198,53 @@ fn bom_is_invisible() {
     assert!(s.contains("| 1 | 1 | 2 | 5 | Hello |"), "{s}");
 }
 
+// --- stdin (-) ---------------------------------------------------------------
+
+#[test]
+fn stdin_toc() {
+    let o = cmd()
+        .arg("-")
+        .write_stdin("# Hello\nbody\n## Sub\ntext\n")
+        .output()
+        .unwrap();
+    assert_eq!(o.status.code(), Some(0));
+    let s = String::from_utf8_lossy(&o.stdout);
+    assert!(s.contains("| 1 | 1 | 4 | 5 | Hello |"), "{s}");
+    assert!(s.contains("| 3 | 2 | 4 | 5 | Sub |"), "{s}");
+}
+
+#[test]
+fn stdin_range_mode() {
+    let o = cmd().args(["-", "2-3"]).write_stdin("l1\nl2\nl3\nl4\n").output().unwrap();
+    assert_eq!(o.status.code(), Some(0));
+    assert_eq!(o.stdout, b"l2\nl3\n");
+}
+
+#[test]
+fn stdin_1_minus_reproduces_input() {
+    let md = "a\nb\n";
+    let o = cmd().args(["-", "1-"]).write_stdin(md).output().unwrap();
+    assert_eq!(o.stdout, md.as_bytes());
+}
+
+#[test]
+fn stdin_bom_is_invisible() {
+    let o = cmd().arg("-").write_stdin("\u{feff}# Hi\nx\n").output().unwrap();
+    let s = String::from_utf8_lossy(&o.stdout);
+    assert!(s.contains("| 1 | 1 | 2 | 2 | Hi |"), "{s}");
+}
+
+#[test]
+fn stdin_not_utf8() {
+    let o = cmd().arg("-").write_stdin([0xFF, 0xFE, 0x00]).output().unwrap();
+    assert_eq!(o.status.code(), Some(1));
+    assert!(o.stdout.is_empty());
+    assert_eq!(
+        String::from_utf8_lossy(&o.stderr),
+        "skimmd: <stdin>: not valid UTF-8\n"
+    );
+}
+
 // --- usage errors (clap, exit 2) ---------------------------------------------
 
 #[test]

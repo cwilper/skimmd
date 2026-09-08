@@ -99,6 +99,9 @@ it.
 
 ## Handy patterns
 
+**Piped input:** `-` as the file reads stdin — `cat file.md | skimmd -` (TOC)
+or `cat file.md | skimmd - 12-19` (range).
+
 **Find a section by keyword without reading it:**
 
 ```bash

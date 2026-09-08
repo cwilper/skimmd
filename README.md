@@ -55,7 +55,7 @@ in `target/release/skimmd`).
 skimmd [OPTIONS] <FILE> [RANGE]...
 
 Arguments:
-  <FILE>     Path to a Markdown file (the first positional is always the file)
+  <FILE>     Path to a Markdown file, or - to read from stdin (the first positional is always the file)
   [RANGE]... Zero or more line ranges; any range switches to range mode
 
 Options:
@@ -118,7 +118,8 @@ $ skimmd FILE 28-29
 Ranges are comma- and/or space-separated, in any mix: `1-5,9-12`, `1-5 9-12`,
 or `1-5,9-12 20-`. Overlaps merge, ranges are emitted in ascending order, and
 `skimmd FILE 1-` reproduces the file exactly (byte-identical after a UTF-8 BOM
-is dropped).
+is dropped). Piped input works too: use `-` as the file (`cat FILE | skimmd -
+1-4`).
 
 ## Behavior worth knowing
 

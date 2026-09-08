@@ -12,7 +12,7 @@ use std::process::ExitCode;
 
 use clap::Parser;
 use skimmd::format::{Format, render};
-use skimmd::lines::{LineMap, LoadErr, io_reason, load_text};
+use skimmd::lines::{LineMap, LoadErr, io_reason, load_stdin, load_text};
 use skimmd::ranges;
 use skimmd::toc::build_toc;
 
@@ -23,14 +23,15 @@ use skimmd::toc::build_toc;
     about = "Print a Markdown file's structure as a TOC (line numbers and sizes), or read verbatim line ranges.",
     after_help = "RANGE grammar: N-M or N- (N- = through the last line). \
         Ranges are comma- and/or space-separated, e.g. 1-5,9-12 or 1-5 9-12. \
-        With no ranges, the TOC is printed."
+        With no ranges, the TOC is printed. \
+        Use - as FILE to read from standard input."
 )]
 struct Cli {
     /// TOC output format (ignored in range mode).
     #[arg(short, long, value_enum, default_value_t = Format::Md)]
     format: Format,
 
-    /// Path to a Markdown file. The first positional is always the file.
+    /// Path to a Markdown file, or `-` for stdin. The first positional is always the file.
     file: String,
 
     /// Zero or more line ranges. Any range switches to range mode.
@@ -41,11 +42,16 @@ struct Cli {
 fn main() -> ExitCode {
     let cli = Cli::parse(); // clap prints usage and exits 2 on usage errors.
 
-    // Load the file (BOM strip + UTF-8 validate) — shared by both modes.
-    let text = match load_text(&std::path::PathBuf::from(&cli.file)) {
+    // Load the input (BOM strip + UTF-8 validate) — shared by both modes.
+    let (label, res) = if cli.file == "-" {
+        ("<stdin>", load_stdin())
+    } else {
+        (cli.file.as_str(), load_text(&std::path::PathBuf::from(&cli.file)))
+    };
+    let text = match res {
         Ok(t) => t,
-        Err(LoadErr::Io(e)) => die(&format!("{}: {}", cli.file, io_reason(&e))),
-        Err(LoadErr::NotUtf8) => die(&format!("{}: not valid UTF-8", cli.file)),
+        Err(LoadErr::Io(e)) => die(&format!("{label}: {}", io_reason(&e))),
+        Err(LoadErr::NotUtf8) => die(&format!("{label}: not valid UTF-8")),
     };
     let lm = LineMap::new(text);
 
