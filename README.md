@@ -3,17 +3,47 @@
 [![crates.io](https://img.shields.io/crates/v/skimmd.svg)](https://crates.io/crates/skimmd)
 [![docs.rs](https://docs.rs/skimmd/badge.svg)](https://docs.rs/skimmd)
 
-`skimmd` is a small CLI for **agent-driven navigation of a single Markdown file**.
-It has two modes:
+`skimmd` lets an agent (or you) read a single Markdown file without loading the
+whole thing: print its table of contents, then fetch exactly the line ranges you
+care about — verbatim, byte for byte.
 
-- **TOC mode** — `skimmd FILE` prints the file's structure as a table of
-  contents with line numbers and sizes, so you (or an agent) can see the whole
-  document at a glance and jump straight to the relevant line range.
-- **Range mode** — `skimmd FILE RANGE...` prints the requested line ranges
-  **verbatim**, byte for byte.
+## Quick demo
 
-It is deliberately narrow: one file, plain stdout, stable and predictable
-output. No rendering, no HTML, no opinionated defaults.
+Say you have a doc and want the **Install** section. See its shape:
+
+```
+$ skimmd docs/example.md
+| line | level | end | chars | title |
+|---|---|---|---|---|
+| 1 | 0 | 6 | 101 | preamble |
+| 7 | 1 | 22 | 60 | Getting started |
+| 11 | 2 | 14 | 66 | Install |
+| 15 | 2 | 20 | 74 | Example |
+| 21 | 2 | 22 | 51 | Next steps |
+```
+
+Or filter to just the sections you care about — a few `|`-separated substrings,
+quoted so the shell passes them through:
+
+```
+$ skimmd docs/example.md -f "install|example"
+| line | level | end | chars | title |
+|---|---|---|---|---|
+| 11 | 2 | 14 | 66 | Install |
+| 15 | 2 | 20 | 74 | Example |
+```
+
+Then fetch a section — exactly those lines, byte for byte:
+
+```
+$ skimmd docs/example.md 11-13
+## Install
+
+Run `cargo install skimmd`, or grab a binary from the releases.
+```
+
+See the shape, filter to what you need, fetch those lines. The full CLI is in
+[Usage](#usage).
 
 ## Install
 
@@ -70,14 +100,11 @@ Options:
 $ skimmd docs/example.md
 | line | level | end | chars | title |
 |---|---|---|---|---|
-| 1 | 0 | 7 | 74 | preamble |
-| 8 | 1 | 30 | 17 | Project |
-| 12 | 2 | 19 | 23 | Install |
-| 16 | 3 | 19 | 14 | macOS |
-| 20 | 2 | 23 | 17 | Usage | Notes |
-| 24 | 2 | 27 | 17 | Setext Heading |
-| 28 | 2 | 28 | 0 | Empty |
-| 29 | 2 | 30 | 26 | Last |
+| 1 | 0 | 6 | 101 | preamble |
+| 7 | 1 | 22 | 60 | Getting started |
+| 11 | 2 | 14 | 66 | Install |
+| 15 | 2 | 20 | 74 | Example |
+| 21 | 2 | 22 | 51 | Next steps |
 ```
 
 Each row is a section:
@@ -109,7 +136,7 @@ one):
 $ skimmd docs/example.md -f install
 | line | level | end | chars | title |
 |---|---|---|---|---|
-| 12 | 2 | 19 | 23 | Install |
+| 11 | 2 | 14 | 66 | Install |
 ```
 
 Because a section's *text* is searched (not just the heading), a substring that
@@ -120,20 +147,21 @@ TOC (header only) and exits `0` — "nothing matched" is not an error.
 ### Range mode
 
 ```
-$ skimmd FILE 1-4
+$ skimmd docs/example.md 1-3
 ---
-title: Example
-tags: [a, b]
+title: skimmd user guide
 ---
 
-$ skimmd FILE 12-14
-## Install
+$ skimmd docs/example.md 15-19
+## Example
 
-Run `cargo install`.
+See the shape of any file with a single command:
 
-$ skimmd FILE 28-29
-## Empty
-## Last
+    $ skimmd notes.md
+
+$ skimmd docs/example.md 21-22
+## Next steps
+Read the usage section for the full CLI reference.
 ```
 
 **Range grammar:** `N-M` (both inclusive) or `N-` (through the last line).
