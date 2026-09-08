@@ -12,7 +12,7 @@ care about — verbatim, byte for byte.
 Say you have a doc and want the **Install** section. See its shape:
 
 ```
-$ skimmd docs/example.md
+$ skimmd samples/sample.md
 | line | level | end | chars | title |
 |---|---|---|---|---|
 | 1 | 0 | 6 | 101 | preamble |
@@ -26,7 +26,7 @@ Or filter to just the sections you care about — a few `|`-separated substrings
 quoted so the shell passes them through:
 
 ```
-$ skimmd docs/example.md -f "install|example"
+$ skimmd samples/sample.md -f "install|example"
 | line | level | end | chars | title |
 |---|---|---|---|---|
 | 11 | 2 | 14 | 66 | Install |
@@ -36,7 +36,7 @@ $ skimmd docs/example.md -f "install|example"
 Then fetch a section — exactly those lines, byte for byte:
 
 ```
-$ skimmd docs/example.md 11-13
+$ skimmd samples/sample.md 11-13
 ## Install
 
 Run `cargo install skimmd`, or grab a binary from the releases.
@@ -97,7 +97,7 @@ Options:
 ### TOC mode
 
 ```
-$ skimmd docs/example.md
+$ skimmd samples/sample.md
 | line | level | end | chars | title |
 |---|---|---|---|---|
 | 1 | 0 | 6 | 101 | preamble |
@@ -133,7 +133,7 @@ scanning the whole TOC. The output is the filtered TOC (same columns as an unfil
 one):
 
 ```
-$ skimmd docs/example.md -f install
+$ skimmd samples/sample.md -f install
 | line | level | end | chars | title |
 |---|---|---|---|---|
 | 11 | 2 | 14 | 66 | Install |
@@ -147,19 +147,19 @@ TOC (header only) and exits `0` — "nothing matched" is not an error.
 ### Range mode
 
 ```
-$ skimmd docs/example.md 1-3
+$ skimmd samples/sample.md 1-3
 ---
 title: skimmd user guide
 ---
 
-$ skimmd docs/example.md 15-19
+$ skimmd samples/sample.md 15-19
 ## Example
 
 See the shape of any file with a single command:
 
     $ skimmd notes.md
 
-$ skimmd docs/example.md 21-22
+$ skimmd samples/sample.md 21-22
 ## Next steps
 Read the usage section for the full CLI reference.
 ```
