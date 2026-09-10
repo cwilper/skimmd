@@ -63,7 +63,7 @@ is in [Usage](#usage).
 
 **Prebuilt binary** (no Rust required). Download the file for your platform and
 CPU from the latest [GitHub Release](https://github.com/cwilper/skimmd/releases);
-`<version>` below is the release version (e.g. `0.4.0`):
+`<version>` below is the release version (e.g. `0.4.1`):
 
 | Platform | File |
 |---|---|
@@ -75,12 +75,12 @@ CPU from the latest [GitHub Release](https://github.com/cwilper/skimmd/releases)
 | Windows ARM64 (aarch64) | `skimmd-<version>-aarch64-pc-windows-msvc.exe` |
 
 Linux builds are statically linked (musl), so they run with no system C runtime.
-Download and install one — e.g. Linux x86_64, v0.4.0:
+Download and install one — e.g. Linux x86_64, v0.4.1:
 
 ```sh
-curl -LO https://github.com/cwilper/skimmd/releases/download/v0.4.0/skimmd-0.4.0-x86_64-unknown-linux-musl
-chmod +x skimmd-0.4.0-x86_64-unknown-linux-musl
-sudo mv skimmd-0.4.0-x86_64-unknown-linux-musl /usr/local/bin/skimmd
+curl -LO https://github.com/cwilper/skimmd/releases/download/v0.4.1/skimmd-0.4.1-x86_64-unknown-linux-musl
+chmod +x skimmd-0.4.1-x86_64-unknown-linux-musl
+sudo mv skimmd-0.4.1-x86_64-unknown-linux-musl /usr/local/bin/skimmd
 ```
 
 **`cargo install`** (if you have Rust ≥ 1.85):

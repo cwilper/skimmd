@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-09-10
+
+### Fixed
+
+- README prebuilt-binary install examples now reference the current release
+  (0.4.1). No functional changes to the binary.
+
 ## [0.4.0] - 2026-09-10
 
 ### Added
