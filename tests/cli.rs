@@ -8,6 +8,7 @@ use std::process::Output;
 use assert_cmd::Command;
 
 const FILE: &str = "tests/fixtures/example.md";
+const DATAFILE: &str = "tests/fixtures/data-images.md";
 const FIX: &str = "tests/fixtures";
 
 fn cmd() -> Command {
@@ -74,10 +75,10 @@ fn filter_matches_title_and_body_case_insensitive() {
     assert_eq!(o.status.code(), Some(0));
     let s = String::from_utf8_lossy(&o.stdout);
     assert!(
-        s.contains("| line | level | end | chars | title | matches |"),
+        s.contains("| line | level | end | chars | elided | title | matches |"),
         "{s}"
     );
-    assert!(s.contains("| 12 | 2 | 19 | 23 | Install | 2 |"), "{s}");
+    assert!(s.contains("| 12 | 2 | 19 | 23 | 0 | Install | 2 |"), "{s}");
     assert_eq!(s.lines().count(), 3, "header + 1 row, got: {s}");
 }
 
@@ -87,7 +88,7 @@ fn filter_matches_body_only_substring() {
     let o = run(&[FILE, "-f", "cargo"]);
     assert_eq!(o.status.code(), Some(0));
     let s = String::from_utf8_lossy(&o.stdout);
-    assert!(s.contains("| 12 | 2 | 19 | 23 | Install | 1 |"), "{s}");
+    assert!(s.contains("| 12 | 2 | 19 | 23 | 0 | Install | 1 |"), "{s}");
     assert_eq!(s.lines().count(), 3, "header + 1 row, got: {s}");
 }
 
@@ -98,11 +99,11 @@ fn filter_can_match_multiple_rows() {
     assert_eq!(o.status.code(), Some(0));
     let s = String::from_utf8_lossy(&o.stdout);
     assert!(
-        s.contains("| 20 | 2 | 23 | 17 | Usage \\| Notes | 1 |"),
+        s.contains("| 20 | 2 | 23 | 17 | 0 | Usage \\| Notes | 1 |"),
         "{s}"
     );
     assert!(
-        s.contains("| 24 | 2 | 27 | 17 | Setext Heading | 1 |"),
+        s.contains("| 24 | 2 | 27 | 17 | 0 | Setext Heading | 1 |"),
         "{s}"
     );
     assert_eq!(s.lines().count(), 4, "header + 2 rows, got: {s}");
@@ -126,7 +127,7 @@ fn filter_no_match_is_empty_toc_and_exit_zero() {
     let o = run(&[FILE, "-f", "zzzz-no-such-word"]);
     assert_eq!(o.status.code(), Some(0), "no match is not an error");
     assert_eq!(
-        o.stdout, b"| line | level | end | chars | title | matches |\n|---|---|---|---|---|---|\n",
+        o.stdout, b"| line | level | end | chars | elided | title | matches |\n|---|---|---|---|---|---|---|\n",
         "header only on no match"
     );
 }
@@ -196,8 +197,61 @@ fn range_1_minus_reproduces_file() {
     assert_eq!(
         o.stdout,
         bytes(FILE),
-        "1- must be byte-identical to the file"
+        "1- must be byte-identical to the file (no data URLs in this fixture)"
     );
+}
+
+// --- data-URL elision + --raw ------------------------------------------------
+
+#[test]
+fn raw_1_minus_reproduces_data_file() {
+    let o = run(&[DATAFILE, "1-", "--raw"]);
+    assert_eq!(
+        o.stdout,
+        bytes(DATAFILE),
+        "--raw 1- must be byte-identical to the file"
+    );
+}
+
+#[test]
+fn default_1_minus_elides_data_file() {
+    let o = run(&[DATAFILE, "1-"]);
+    assert_eq!(
+        o.stdout,
+        bytes("tests/fixtures/expected_data-images.txt"),
+        "default 1- must match the elided golden"
+    );
+}
+
+#[test]
+fn toc_shows_nonzero_elided_on_image_sections() {
+    let o = run(&[DATAFILE]);
+    let s = String::from_utf8_lossy(&o.stdout);
+    assert!(s.contains("| chars | elided |"), "header: {s}");
+    // Figure section: elided markdown image -> elided > 0 (198 raw − 95 chars).
+    assert!(
+        s.contains("| 3 | 2 | 10 | 95 | 103 | Figure |"),
+        "Figure row: {s}"
+    );
+    // Code sample section: fence is verbatim -> elided == 0.
+    assert!(
+        s.contains("| 15 | 2 | 21 | 101 | 0 | Code sample |"),
+        "Code sample row: {s}"
+    );
+}
+
+#[test]
+fn raw_is_noop_in_toc_mode() {
+    let a = run(&[DATAFILE]);
+    let b = run(&[DATAFILE, "--raw"]);
+    assert_eq!(a.stdout, b.stdout, "--raw must be a no-op in TOC mode");
+}
+
+#[test]
+fn help_mentions_raw() {
+    let o = cmd().arg("--help").output().unwrap();
+    let s = String::from_utf8_lossy(&o.stdout);
+    assert!(s.contains("--raw"), "help missing --raw: {s}");
 }
 
 #[test]
@@ -276,7 +330,7 @@ fn bom_is_invisible() {
     let o = run(&[p.to_str().unwrap()]);
     // BOM stripped: a normal H1 at line 1, no phantom bytes.
     let s = String::from_utf8_lossy(&o.stdout);
-    assert!(s.contains("| 1 | 1 | 2 | 5 | Hello |"), "{s}");
+    assert!(s.contains("| 1 | 1 | 2 | 5 | 0 | Hello |"), "{s}");
 }
 
 // --- stdin (-) ---------------------------------------------------------------
@@ -290,7 +344,10 @@ fn no_args_is_same_as_dash_stdin() {
     assert_eq!(a.status.code(), Some(0), "no-args must succeed");
     assert_eq!(a.stdout, b.stdout, "no-args must behave like '-'");
     let s = String::from_utf8_lossy(&a.stdout);
-    assert!(s.contains("| 1 | 1 | 4 | 5 | Hello |"), "TOC missing: {s}");
+    assert!(
+        s.contains("| 1 | 1 | 4 | 5 | 0 | Hello |"),
+        "TOC missing: {s}"
+    );
 }
 
 #[test]
@@ -302,8 +359,8 @@ fn stdin_toc() {
         .unwrap();
     assert_eq!(o.status.code(), Some(0));
     let s = String::from_utf8_lossy(&o.stdout);
-    assert!(s.contains("| 1 | 1 | 4 | 5 | Hello |"), "{s}");
-    assert!(s.contains("| 3 | 2 | 4 | 5 | Sub |"), "{s}");
+    assert!(s.contains("| 1 | 1 | 4 | 5 | 0 | Hello |"), "{s}");
+    assert!(s.contains("| 3 | 2 | 4 | 5 | 0 | Sub |"), "{s}");
 }
 
 #[test]
@@ -332,7 +389,7 @@ fn stdin_bom_is_invisible() {
         .output()
         .unwrap();
     let s = String::from_utf8_lossy(&o.stdout);
-    assert!(s.contains("| 1 | 1 | 2 | 2 | Hi |"), "{s}");
+    assert!(s.contains("| 1 | 1 | 2 | 2 | 0 | Hi |"), "{s}");
 }
 
 #[test]

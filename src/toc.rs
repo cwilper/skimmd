@@ -1,14 +1,19 @@
 //! Heading extraction and TOC row computation.
 //!
 //! See spec §5 (heading extraction) and §6 (TOC row computation). Every row has
-//! exactly five fields in this order: `line`, `level`, `end`, `chars`, `title`.
+//! exactly six fields in this order: `line`, `level`, `end`, `chars`,
+//! `elided`, `title`.
 //!
-//! Two distinct right-hand boundaries are computed per heading:
-//! * `chars` stops at the **next heading of any level** (the heading's own body).
+//! Three distinct right-hand boundaries / measurements are computed per heading:
+//! * `chars` / `elided` stop at the **next heading of any level** (the
+//!   heading's own body); `chars` counts the body after data-URL elision
+//!   (what a default-mode fetch returns), `elided` how many chars the elision
+//!   removed (raw total minus `chars`).
 //! * `end` stops before the **next heading of equal or shallower level** (subtree).
 
 use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
+use crate::elide::elide_data_urls;
 use crate::lines::LineMap;
 
 /// One TOC row. Field order is load-bearing (matches the Markdown emitter).
@@ -17,7 +22,11 @@ pub struct Row {
     pub line: usize,
     pub level: u8,
     pub end: usize,
+    /// Body chars after the default data-URL elision (= default fetch cost).
     pub chars: usize,
+    /// Chars the elision removed from this body (raw total minus `chars`); 0
+    /// when the body has no elided data-URL payloads.
+    pub elided: usize,
     pub title: String,
 }
 
@@ -54,11 +63,13 @@ pub fn build_toc(lm: &LineMap) -> Vec<Row> {
     // Preamble row (§6.1): emitted iff N > 0 and line 1 is not a heading.
     if n > 0 && (k == 0 || headings[0].first_line > 1) {
         let p = if k > 0 { headings[0].first_line - 1 } else { n };
+        let (chars, elided) = size_pair(lm, 1, p);
         rows.push(Row {
             line: 1,
             level: 0,
             end: p,
-            chars: lm.chars(1, p),
+            chars,
+            elided,
             title: "preamble".into(),
         });
     }
@@ -86,16 +97,29 @@ pub fn build_toc(lm: &LineMap) -> Vec<Row> {
         } else {
             n
         };
+        let (chars, elided) = size_pair(lm, body_a, body_b);
         rows.push(Row {
             line: h.first_line,
             level: h.level,
             end: ends[i],
-            chars: lm.chars(body_a, body_b),
+            chars,
+            elided,
             title: h.title.clone(),
         });
     }
 
     rows
+}
+
+/// `(chars, elided)` for body span `a..b`: the char count after the default
+/// data-URL elision, and how many chars that elision removed
+/// (`elided = raw − chars`). One span read, the same transform the range
+/// output applies — the TOC and the output cannot disagree (spec §4).
+fn size_pair(lm: &LineMap, a: usize, b: usize) -> (usize, usize) {
+    let span = lm.span(a, b);
+    let chars = elide_data_urls(span).chars().count();
+    let raw = span.chars().count();
+    (chars, raw - chars)
 }
 
 /// Keep rows whose section text matches any candidate in a `|`-separated `needle`
@@ -413,6 +437,7 @@ mod tests {
                 level: 0,
                 end: 2,
                 chars: 20,
+                elided: 0,
                 title: "preamble".into(),
             }
         );

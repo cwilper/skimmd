@@ -23,13 +23,13 @@ of your terms:
 
 ```
 $ skimmd samples/1.full-article.md -f "acid|pollut"
-| line | level | end | chars | title | matches |
-|---|---|---|---|---|---|
-| 128 | 2 | 199 | 3152 | Contents | 4 |
-| 445 | 3 | 472 | 5083 | Human influence | 3 |
-| 518 | 3 | 534 | 1979 | Acidity | 21 |
-| 589 | 3 | 630 | 5255 | Pollution and composition | 17 |
-| 1121 | 2 | 2383 | 126347 | References | 9 |
+| line | level | end | chars | elided | title | matches |
+|---|---|---|---|---|---|---|
+| 128 | 2 | 199 | 3152 | 0 | Contents | 2 |
+| 445 | 3 | 472 | 5083 | 0 | Human influence | 3 |
+| 518 | 3 | 534 | 1979 | 0 | Acidity | 12 |
+| 589 | 3 | 630 | 5255 | 0 | Pollution and composition | 8 |
+| 1121 | 2 | 2383 | 126347 | 0 | References | 7 |
 ```
 
 ### Then, extract just the sections you want
@@ -99,29 +99,30 @@ in `target/release/skimmd`).
 skimmd [OPTIONS] [FILE] [RANGE]...
 
 Arguments:
-  [FILE]     Path to a Markdown file, or - to read from stdin. Omit it (or use -) to read from standard input.
-  [RANGE]... Zero or more line ranges; any range switches to range mode
+  [FILE]      Path to a Markdown file, or `-` for stdin. Omitted (or `-`) reads from stdin
+  [RANGE]...  Zero or more line ranges. Any range switches to range mode
 
 Options:
-  -f, --filter <SUBSTRING> Filter TOC rows: `|`-separated substrings, a row matches if any occurs in its heading or body (case- and whitespace-insensitive; substring match — `foo` also matches `food`; link/embed targets — URLs and base64 data — don't match; TOC mode only)
-  -h, --help             Help
-  -V, --version          Version
+  -f, --filter <SUBSTRING>  Filter TOC rows by substring (TOC mode only, ignored in range mode). |-separated substrings; keep a row if any occurs in its heading or section body. Case- and whitespace-insensitive, and substring (not whole-word) matching, so "foo" also matches "food"
+      --raw                 Range mode: emit lines verbatim, without data-URL elision. Ignored in TOC mode
+  -h, --help                Print help
+  -V, --version             Print version
 ```
 
 ### TOC mode
 
 ```
 $ skimmd samples/1.full-article.md
-| line | level | end | chars | title |
-|---|---|---|---|---|
-| 1 | 0 | 40 | 1311 | preamble |
-| 41 | 1 | 2913 | 6797 | Rain |
-| 128 | 2 | 199 | 3152 | Contents |
-| 200 | 2 | 332 | 1 | Formation |
-| 203 | 3 | 239 | 4489 | Water-saturated air |
+| line | level | end | chars | elided | title |
+|---|---|---|---|---|---|
+| 1 | 0 | 40 | 1311 | 0 | preamble |
+| 41 | 1 | 2913 | 6797 | 0 | Rain |
+| 128 | 2 | 199 | 3152 | 0 | Contents |
+| 200 | 2 | 332 | 1 | 0 | Formation |
+| 203 | 3 | 239 | 4489 | 0 | Water-saturated air |
 | … |
-| 2384 | 2 | 2913 | 1384 | External links |
-| 2413 | 4 | 2913 | 22084 | Languages |
+| 2384 | 2 | 2913 | 1384 | 0 | External links |
+| 2413 | 4 | 2913 | 22084 | 0 | Languages |
 ```
 
 Each row is a section:
@@ -132,7 +133,11 @@ Each row is a section:
 - `end` — the last line of the section's subtree (its heading and everything up
   to the next heading of equal or shallower level).
 - `chars` — the character count of the section's body (after its own heading
-  line(s), before the next heading).
+  line(s), before the next heading) **after data-URL elision** — i.e. what a
+  default-mode fetch of the section would return.
+- `elided` — how many chars the elision removed from that body (the raw total
+  minus `chars`). `0` when the body has no elided data-URL payloads; a large
+  value marks an image-heavy section. The pre-elision total is `chars + elided`.
 - `title` — the heading text with Markdown emphasis/code/links stripped and
   internal whitespace collapsed to single spaces.
 
@@ -156,13 +161,13 @@ which only brush the topic:
 
 ```
 $ skimmd samples/1.full-article.md -f "acid|pollution"
-| line | level | end | chars | title | matches |
-|---|---|---|---|---|---|
-| 128 | 2 | 199 | 3152 | Contents | 2 |
-| 445 | 3 | 472 | 5083 | Human influence | 3 |
-| 518 | 3 | 534 | 1979 | Acidity | 12 |
-| 589 | 3 | 630 | 5255 | Pollution and composition | 8 |
-| 1121 | 2 | 2383 | 126347 | References | 7 |
+| line | level | end | chars | elided | title | matches |
+|---|---|---|---|---|---|---|
+| 128 | 2 | 199 | 3152 | 0 | Contents | 2 |
+| 445 | 3 | 472 | 5083 | 0 | Human influence | 3 |
+| 518 | 3 | 534 | 1979 | 0 | Acidity | 12 |
+| 589 | 3 | 630 | 5255 | 0 | Pollution and composition | 8 |
+| 1121 | 2 | 2383 | 126347 | 0 | References | 7 |
 ```
 
 Because a section's *text* is searched (not just the heading), a substring that
@@ -188,10 +193,16 @@ and household wastes can end up in rainwater …
 
 **Range grammar:** `N-M` (both inclusive) or `N-` (through the last line).
 Ranges are comma- and/or space-separated, in any mix: `1-5,9-12`, `1-5 9-12`,
-or `1-5,9-12 20-`. Overlaps merge, ranges are emitted in ascending order, and
-`skimmd FILE 1-` reproduces the file exactly (byte-identical after a UTF-8 BOM
-is dropped). Piped input works too: use `-` as the file (`cat FILE | skimmd -
-1-4`).
+or `1-5,9-12 20-`. Overlaps merge, and ranges are emitted in ascending order.
+
+**Data-URL elision:** by default, data-URL image payloads (`![alt](data:…)`,
+`<img src="data:…">`) are elided to the marker `data:…`, so base64 blobs never
+enter your context; a markdown-form elision in normal content is wrapped in an
+HTML comment (`<!-- ![alt](data:…) -->`) so renderers show nothing. Line
+numbers stay truthful (elision is line-preserving). Pass `--raw` to emit lines
+verbatim — `skimmd FILE 1- --raw` reproduces the file exactly (byte-identical
+after a UTF-8 BOM is dropped). Piped input works too: use `-` as the file
+(`cat FILE | skimmd - 1-4`).
 
 ## Behavior worth knowing
 
@@ -201,6 +212,9 @@ is dropped). Piped input works too: use `-` as the file (`cat FILE | skimmd -
 - **Setext headings** (`Title\n===`) and **ATX headings** both work. Headings
   inside code blocks, blockquotes, or lists are *not* TOC entries.
 - **Line numbers are 1-based** over the raw file lines.
+- **Data-URL elision** is line-preserving and idempotent; it never touches
+  data URLs inside fenced code blocks, plain (non-image) links, reference
+  definitions, or non-data URL targets. Use `--raw` for byte-exact output.
 
 ## Exit codes
 

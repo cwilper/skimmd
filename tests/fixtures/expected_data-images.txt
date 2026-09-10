@@ -1,0 +1,21 @@
+# Data images
+
+## Figure
+
+An embedded figure follows.
+
+<!-- ![A tiny square.](data:…) -->
+
+More text after the figure.
+
+## Svg
+
+<img src="data:…" alt="red square">
+
+## Code sample
+
+```
+![fenced](data:image/png;base64,AAAAMDEyMw==)
+```
+
+That block is a code sample, shown verbatim.

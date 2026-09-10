@@ -7,8 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `--raw`: range mode emits lines verbatim, without data-URL elision (the
+  pre-elision behavior; `--raw 1-` is byte-identical to the file after a
+  UTF-8 BOM drop). Ignored in TOC mode.
+- `elided` TOC column: how many chars the data-URL elision removed from the
+  section body (raw total minus `chars`); the `chars` column counts the body
+  after elision (what a default-mode fetch returns). `0` when the body has no
+  elided data-URL payloads; a large value marks an image-heavy section.
+- A second `samples/` set (files 5–7) demonstrating the elision, `--raw`,
+  and the size columns on a small original document.
+
 ### Changed
 
+- Range mode now elides data-URL image payloads by default: `![alt](data:…)`
+  and `<img src="data:…">` payloads become the marker `data:…` (markdown-form
+  elisions in normal content are wrapped in an HTML comment so renderers show
+  nothing). Elision is line-preserving and idempotent; data URLs inside fenced
+  code blocks, plain links, reference definitions, and non-data URL targets
+  are untouched.
+- The TOC tables gain a column (6 columns unfiltered, 7 with `-f`);
+  `samples/2.full-toc.md` and `samples/3.filtered-toc.md` were regenerated.
 - `--filter` now matches a section's *rendered* text, not its raw source: the
   *targets* of links and embeds — URLs and base64 `data:` payloads in Markdown
   links and images, bare URLs, link titles, and URLs in raw HTML — no longer

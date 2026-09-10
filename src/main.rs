@@ -3,7 +3,8 @@
 //! Two modes (spec §2):
 //! * TOC mode — `skimmd [FILE]` prints the structure table.
 //!   (FILE omitted or `-` reads from standard input.)
-//! * Range mode — `skimmd FILE RANGE...` prints the requested line ranges verbatim.
+//! * Range mode — `skimmd FILE RANGE...` prints the requested line ranges,
+//!   with data-URL image payloads elided by default (`--raw` for verbatim).
 //!
 //! Exit codes (spec §9): 0 success; 1 the request could not be satisfied
 //! (file / range / stdout errors); 2 clap usage errors (handled by clap).
@@ -12,6 +13,7 @@ use std::io::{BufWriter, Write};
 use std::process::ExitCode;
 
 use clap::Parser;
+use skimmd::elide::elide_data_urls;
 use skimmd::format::{render, render_filtered};
 use skimmd::lines::{LineMap, LoadErr, io_reason, load_stdin, load_text};
 use skimmd::ranges;
@@ -21,11 +23,13 @@ use skimmd::toc::{build_toc, filter_rows};
 #[derive(Parser)]
 #[command(
     version,
-    about = "Print a Markdown file's structure as a TOC (line numbers and sizes), or read verbatim line ranges.",
+    about = "Print a Markdown file's structure as a TOC (line numbers and sizes), or read line ranges.",
     after_help = "RANGE grammar: N-M or N- (N- = through the last line). \
         Ranges are comma- and/or space-separated, e.g. 1-5,9-12 or 1-5 9-12. \
         With no ranges, the TOC is printed. \
-        Omit FILE (or use -) to read from standard input. "
+        Omit FILE (or use -) to read from standard input. \
+        Range mode elides data-URL image payloads to `data:…` by default; \
+        --raw emits lines verbatim. "
 )]
 struct Cli {
     /// Filter TOC rows by substring (TOC mode only, ignored in range mode).
@@ -34,6 +38,11 @@ struct Cli {
     /// matching, so "foo" also matches "food".
     #[arg(short = 'f', long = "filter", value_name = "SUBSTRING")]
     filter: Option<String>,
+
+    /// Range mode: emit lines verbatim, without data-URL elision. Ignored in
+    /// TOC mode.
+    #[arg(long)]
+    raw: bool,
 
     /// Path to a Markdown file, or `-` for stdin. Omitted (or `-`) reads from stdin.
     #[arg(required = false)]
@@ -62,7 +71,7 @@ fn main() -> ExitCode {
     if cli.ranges.is_empty() {
         toc_mode(&lm, cli.filter.as_deref())
     } else {
-        range_mode(&lm, &cli.ranges)
+        range_mode(&lm, &cli.ranges, cli.raw)
     }
 }
 
@@ -78,15 +87,22 @@ fn toc_mode(lm: &LineMap, filter: Option<&str>) -> ExitCode {
 }
 
 /// Range mode: parse/validate/normalize all ranges **before any output**, then
-/// write each merged range's bytes in order, with no separators.
-fn range_mode(lm: &LineMap, specs: &[String]) -> ExitCode {
+/// write each merged range's bytes in order, with no separators. Unless
+/// `raw`, each span passes through the data-URL elision transform first
+/// (applied per span; elision state does not cross range gaps).
+fn range_mode(lm: &LineMap, specs: &[String], raw: bool) -> ExitCode {
     let merged = match ranges::parse(specs, lm.n()) {
         Ok(m) => m,
         Err(e) => die(&e.message()),
     };
     let mut out = String::new();
     for r in &merged {
-        out.push_str(lm.span(r.start, r.end));
+        let span = lm.span(r.start, r.end);
+        if raw {
+            out.push_str(span);
+        } else {
+            out.push_str(&elide_data_urls(span));
+        }
     }
     write_stdout(&out)
 }
