@@ -45,7 +45,15 @@ Two channels, both driven by the `Cargo.toml` `version` + a matching `vX.Y.Z` ta
    - `Cargo.lock` dependency versions (Cargo-managed; only skimmd's own line moves)
    - version-looking strings in content (e.g. DOIs/URLs in `samples/` articles)
 5. Commit (e.g. `Release X.Y.Z`).
-6. `git tag vX.Y.Z` (**must equal** the `Cargo.toml` version), then
-   `git push origin main vX.Y.Z` → `release.yml` builds 6 binaries + GitHub Release.
-7. `cargo publish` from the tagged commit (crates.io is **immutable** — a
-   mistake means yank + a new version).
+6. `git tag vX.Y.Z` (**must equal** the `Cargo.toml` version).
+7. **Verify the tagged commit before pushing** (objective pass/fail):
+   - README version refs are *only* the new version (one check for presence
+     + no stale prior version):
+     `git show vX.Y.Z:README.md | rg -o 'v?[0-9]+\.[0-9]+\.[0-9]+'`
+     → every match is `X.Y.Z` or `vX.Y.Z`; no other version strings
+   - tag matches `Cargo.toml`: `git describe --tags --exact-match` == `vX.Y.Z`,
+     and `rg '^version' Cargo.toml` == `X.Y.Z`
+8. `git push origin main vX.Y.Z` → `release.yml` builds 6 binaries + GitHub Release.
+9. `cargo publish` from the tagged commit (crates.io is **immutable** — a
+   mistake means yank + a new version). A `cargo publish --dry-run` first is a
+   cheap guard.
