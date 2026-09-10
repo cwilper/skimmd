@@ -103,7 +103,7 @@ Arguments:
   [RANGE]... Zero or more line ranges; any range switches to range mode
 
 Options:
-  -f, --filter <SUBSTRING> Filter TOC rows: `|`-separated substrings, a row matches if any occurs in its heading or body (case- and whitespace-insensitive; substring match — `foo` also matches `food`; TOC mode only)
+  -f, --filter <SUBSTRING> Filter TOC rows: `|`-separated substrings, a row matches if any occurs in its heading or body (case- and whitespace-insensitive; substring match — `foo` also matches `food`; link/embed targets — URLs and base64 data — don't match; TOC mode only)
   -h, --help             Help
   -V, --version          Version
 ```
@@ -145,7 +145,10 @@ not a regex; leading, trailing, and repeated pipes are ignored. Each candidate i
 matched case-insensitively, whitespace-insensitively, and as a **substring** (not a
 whole word — so `foo` also matches `food`). Every run of whitespace (spaces, tabs,
 newlines) collapses to a single space on both sides, so a candidate can match across a
-line break. It is how you jump straight to the sections you care about instead of
+line break. Matching runs on the section's *rendered* text, so the *targets* of
+links and embeds — URLs and base64 `data:` payloads in Markdown links and images,
+bare URLs, link titles, and raw HTML — never match, while link text and alt text
+do. It is how you jump straight to the sections you care about instead of
 scanning the whole TOC. The output is the filtered TOC plus a `matches` column —
 the total occurrences of your candidate substrings in that section (heading + body,
 summed over all candidates), a ranking signal for which hits are meaty sections and
@@ -155,10 +158,10 @@ which only brush the topic:
 $ skimmd samples/1.full-article.md -f "acid|pollution"
 | line | level | end | chars | title | matches |
 |---|---|---|---|---|---|
-| 128 | 2 | 199 | 3152 | Contents | 4 |
+| 128 | 2 | 199 | 3152 | Contents | 2 |
 | 445 | 3 | 472 | 5083 | Human influence | 3 |
-| 518 | 3 | 534 | 1979 | Acidity | 21 |
-| 589 | 3 | 630 | 5255 | Pollution and composition | 14 |
+| 518 | 3 | 534 | 1979 | Acidity | 12 |
+| 589 | 3 | 630 | 5255 | Pollution and composition | 8 |
 | 1121 | 2 | 2383 | 126347 | References | 7 |
 ```
 

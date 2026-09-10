@@ -108,6 +108,11 @@ pub fn build_toc(lm: &LineMap) -> Vec<Row> {
 /// from `a||b`) are ignored; a value with none left keeps every row (each with
 /// `matches == 0`). A row's block is its heading line(s) plus its own body: `line`
 /// up to the line before the next row's heading, or EOF (subsections excluded).
+///
+/// The matched text is the block's *rendered* text ([`block_haystack`]), not the
+/// raw source: link and embed destinations — URLs and base64 `data:` payloads in
+/// Markdown links/images, bare URLs, reference definitions, and raw HTML — never
+/// match, while link text and alt text do.
 #[must_use]
 pub fn filter_rows(lm: &LineMap, rows: &[Row], needle: &str) -> Vec<(Row, usize)> {
     let needles = split_needles(needle);
@@ -116,7 +121,7 @@ pub fn filter_rows(lm: &LineMap, rows: &[Row], needle: &str) -> Vec<(Row, usize)
         .enumerate()
         .filter_map(|(i, r)| {
             let block_end = rows.get(i + 1).map_or(n, |next| next.line - 1);
-            let hay = normalize_ws(&lm.span(r.line, block_end).to_lowercase());
+            let hay = block_haystack(lm.span(r.line, block_end));
             let matches: usize = needles
                 .iter()
                 .map(|nd| hay.matches(nd.as_str()).count())
@@ -124,6 +129,79 @@ pub fn filter_rows(lm: &LineMap, rows: &[Row], needle: &str) -> Vec<(Row, usize)
             (matches > 0 || needles.is_empty()).then(|| (r.clone(), matches))
         })
         .collect()
+}
+
+/// The filter haystack for a row's block: its *rendered* text, lowercased and
+/// whitespace-normalized — the same parser events heading titles are built from,
+/// so link/embed destinations never appear: Markdown link/image targets live on
+/// the tag rather than in `Text` events, reference definitions emit no events,
+/// and bare URLs / `data:` payloads are stripped from the text that remains
+/// ([`strip_url_tokens`]), which also drops the URLs in raw HTML while keeping
+/// the visible text in it matchable.
+fn block_haystack(block: &str) -> String {
+    let mut out = String::new();
+    for ev in Parser::new_ext(block, parser_opts()) {
+        match ev {
+            // Fenced/indented code block contents arrive as Text events between
+            // Start/End(Tag::CodeBlock), so no separate arm is needed.
+            Event::Text(s)
+            | Event::Code(s)
+            | Event::InlineMath(s)
+            | Event::DisplayMath(s)
+            | Event::Html(s)
+            | Event::InlineHtml(s) => out.push_str(&strip_url_tokens(&s)),
+            // Soft/hard breaks become a single space (normalized away later).
+            Event::SoftBreak | Event::HardBreak => out.push(' '),
+            _ => {}
+        }
+    }
+    normalize_ws(&out.to_lowercase())
+}
+
+/// Drop URL-like tokens (`scheme://…`, `data:…`) from a text or raw-HTML string,
+/// keeping everything else. The scheme is dropped too (scanned back over scheme
+/// chars), so `href=https://x` leaves no `https` residue; a token ends at
+/// whitespace, a quote, or an angle bracket.
+fn strip_url_tokens(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if s[i..].starts_with("://") || s[i..].starts_with("data:") {
+            let mut start = i;
+            while start > 0 {
+                let c = s[..start].chars().next_back().unwrap();
+                if c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.') {
+                    start -= c.len_utf8();
+                } else {
+                    break;
+                }
+            }
+            let mut j = if s[i..].starts_with("data:") {
+                i + 5
+            } else {
+                i + 3
+            };
+            while j < bytes.len()
+                && !matches!(
+                    bytes[j],
+                    b' ' | b'\t' | b'\n' | b'\r' | b'"' | b'\'' | b'<' | b'>'
+                )
+            {
+                j += 1;
+            }
+            // The scheme (s[start..i]) was already pushed; drop it too. The tail
+            // of `out` is s[start..i] verbatim: removed spans end at terminators
+            // (or EOF) and s[start..i] contains none.
+            out.truncate(out.len() - (i - start));
+            i = j;
+        } else {
+            let c = s[i..].chars().next().unwrap();
+            out.push(c);
+            i += c.len_utf8();
+        }
+    }
+    out
 }
 
 /// Walk the offset iterator and collect headings in document order (§5.2).
@@ -441,6 +519,80 @@ mod tests {
         }
         // None of the candidates present -> no rows.
         assert!(filter_rows(&lm, &rows, "foo|bar").is_empty());
+    }
+
+    #[test]
+    fn filter_ignores_link_and_embed_targets() {
+        // Needle content inside link/image targets (URLs and base64 data URIs)
+        // must not match; link text, alt text, and surrounding prose must.
+        let s = "# Pic\n\
+                 ![alt text](data:image/png;base64,iVBORw0KGgoAAA)\n\
+                 [link](https://ex.com/needle.png) prose needle\n";
+        let lm = LineMap::new(s.to_string());
+        let rows = build_toc(&lm);
+        assert!(
+            filter_rows(&lm, &rows, "iVBORw0KGgo").is_empty(),
+            "base64 payload"
+        );
+        assert!(
+            filter_rows(&lm, &rows, "ex.com/needle").is_empty(),
+            "link URL"
+        );
+        assert_eq!(filter_rows(&lm, &rows, "alt text")[0].1, 1, "alt text kept");
+        assert_eq!(filter_rows(&lm, &rows, "link")[0].1, 1, "link text kept");
+        assert_eq!(
+            filter_rows(&lm, &rows, "prose needle")[0].1,
+            1,
+            "prose kept"
+        );
+    }
+
+    #[test]
+    fn filter_ignores_bare_urls_and_reference_definitions() {
+        let s = "# S\nsee https://ex.com/needle for info\n\n[ref]: ./img/needle2.png\n";
+        let lm = LineMap::new(s.to_string());
+        let rows = build_toc(&lm);
+        assert!(
+            filter_rows(&lm, &rows, "needle").is_empty(),
+            "bare URL + ref def"
+        );
+        // Autolinked <url> form and the surrounding prose.
+        let s = "# S\nsee <https://ex.com/needle2> ok\n";
+        let lm = LineMap::new(s.to_string());
+        let rows = build_toc(&lm);
+        assert!(
+            filter_rows(&lm, &rows, "needle2").is_empty(),
+            "autolink <url>"
+        );
+        assert_eq!(filter_rows(&lm, &rows, "ok")[0].1, 1);
+    }
+
+    #[test]
+    fn filter_ignores_url_schemes_too() {
+        // The scheme itself must not be searchable residue: a section whose only
+        // "https"/"data" occurrences are inside URLs doesn't match them.
+        let s = "# S\nsee https://ex.com/a and <img src=\"data:image/png;base64,xx\">\n";
+        let lm = LineMap::new(s.to_string());
+        let rows = build_toc(&lm);
+        assert!(filter_rows(&lm, &rows, "https").is_empty(), "https residue");
+        assert!(filter_rows(&lm, &rows, "http").is_empty(), "http residue");
+        assert!(filter_rows(&lm, &rows, "data").is_empty(), "data residue");
+        // Prose words around the URLs still match.
+        assert_eq!(filter_rows(&lm, &rows, "see")[0].1, 1);
+    }
+
+    #[test]
+    fn filter_ignores_html_embed_urls_but_keeps_html_text() {
+        let s = "# S\n\
+                 <img src=\"data:image/png;base64,NEEDLE123\">\n\
+                 <a href=\"https://ex.com/needle123\">visible</a>\n";
+        let lm = LineMap::new(s.to_string());
+        let rows = build_toc(&lm);
+        assert!(
+            filter_rows(&lm, &rows, "needle123").is_empty(),
+            "html src/href"
+        );
+        assert_eq!(filter_rows(&lm, &rows, "visible")[0].1, 1, "html text kept");
     }
 
     // --- §12.8 structural invariants (private access, no public helper needed) -

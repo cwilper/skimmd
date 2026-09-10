@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- `--filter` now matches a section's *rendered* text, not its raw source: the
+  *targets* of links and embeds — URLs and base64 `data:` payloads in Markdown
+  links and images, bare URLs, link titles, and URLs in raw HTML — no longer
+  match, while link text and alt text do. `samples/3.filtered-toc.md` and the
+  README snippet were regenerated with the corrected counts.
+
 ## [0.3.0] - 2026-09-08
 
 ### Added
