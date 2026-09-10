@@ -7,8 +7,8 @@
 #
 #   git tag v0.1.0 && git push origin v0.1.0      # triggers this workflow
 #
-# crates.io publishing is a separate step (`cargo publish`) — see
-# docs/release-guidance.md. The tag must match `version` in Cargo.toml.
+# crates.io publishing is a separate step (`cargo publish`). The tag must
+# match `version` in Cargo.toml.
 name: Release
 
 on:
