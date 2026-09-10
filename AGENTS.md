@@ -20,8 +20,9 @@ Plus the sample drift check (captured outputs must stay in sync):
 
 ## Conventions
 - Keep this file up to date: if you change the toolchain pin, a quality gate,
-  the layout, or the release steps, update it in the same change.
-- Before finishing non-trivial work, run a ponytail review of the diff and
+  the layout, release steps, or any other detail this file refers to, updatei
+  it in the same change.
+- Before finishing any non-trivial work, run a ponytail review of the diff and
   apply the suggested simplifications.
 
 ## Layout
