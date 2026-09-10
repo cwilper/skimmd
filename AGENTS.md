@@ -37,15 +37,15 @@ Two channels, both driven by the `Cargo.toml` `version` + a matching `vX.Y.Z` ta
 2. `CHANGELOG.md`: move `## [Unreleased]` under a new `## [X.Y.Z] - <date>`;
    add a fresh empty `## [Unreleased]` on top.
 3. Bump `version` in `Cargo.toml`; build so `Cargo.lock` refreshes.
-4. Commit (e.g. `Release X.Y.Z`).
-5. `git tag vX.Y.Z` (**must equal** the `Cargo.toml` version), then
+4. Bump every doc that references a *concrete* version to the new release
+   version (README install examples: the `<version>` note, `vX.Y.Z` prose, and
+   the `curl`/`chmod`/`mv` commands). Do this **before the commit**, so the
+   bumped README lands in the tagged commit. Don't touch:
+   - `CHANGELOG.md` historical entries (record of past releases)
+   - `Cargo.lock` dependency versions (Cargo-managed; only skimmd's own line moves)
+   - version-looking strings in content (e.g. DOIs/URLs in `samples/` articles)
+5. Commit (e.g. `Release X.Y.Z`).
+6. `git tag vX.Y.Z` (**must equal** the `Cargo.toml` version), then
    `git push origin main vX.Y.Z` → `release.yml` builds 6 binaries + GitHub Release.
-6. `cargo publish` from the tagged commit (crates.io is **immutable** — a
+7. `cargo publish` from the tagged commit (crates.io is **immutable** — a
    mistake means yank + a new version).
-
-Then bump every doc that references a *concrete* version to the new release
-version (README install examples: the `<version>` note, `vX.Y.Z` prose, and the
-`curl`/`chmod`/`mv` commands). Don't touch:
-- `CHANGELOG.md` historical entries (record of past releases)
-- `Cargo.lock` dependency versions (Cargo-managed; only skimmd's own line moves)
-- version-looking strings in content (e.g. DOIs/URLs in `samples/` articles)
